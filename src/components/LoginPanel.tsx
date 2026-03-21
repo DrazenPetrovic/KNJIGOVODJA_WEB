@@ -36,10 +36,15 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
     }
   };
 
+  const primary = "#785E9E";
+  const primaryHover = "#684f8a";
+  const primaryActive = "#574176";
+  const accent = "#8FC74A";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen login-soft-bg flex items-center justify-center p-4 md:p-6 lg:p-8">
       <div className="w-full max-w-md md:max-w-lg lg:max-w-xl">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 lg:p-12">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 lg:p-12 border-2 border-transparent">
           <div className="flex justify-center mb-8">
             <div className="w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
               <img
@@ -51,7 +56,7 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
                   target.style.display = "none";
                   const parent = target.parentElement;
                   if (parent) {
-                    parent.innerHTML = `<div class="bg-[#3B5998] p-5 md:p-6 rounded-full"><svg class="w-10 h-10 md:w-12 md:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg></div>`;
+                    parent.innerHTML = `<div style="background:${primary}" class="p-5 md:p-6 rounded-full"><svg class="w-10 h-10 md:w-12 md:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg></div>`;
                   }
                 }}
               />
@@ -61,7 +66,9 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
           <h1 className="text-center text-2xl font-bold text-gray-800 mb-2">
             Kancelarija
           </h1>
-          <p className="text-center text-gray-500 mb-8">Karpas Ambalaže</p>
+          <p className="text-center mb-8" style={{ color: primary }}>
+            Karpas Ambalaže
+          </p>
 
           <form
             onSubmit={handleLogin}
@@ -86,11 +93,11 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
                 className="w-full px-5 py-4 md:px-6 md:py-5 text-base md:text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-4 transition"
                 style={
                   {
-                    "--tw-ring-color": "#3B5998",
+                    "--tw-ring-color": `${primary}55`,
                     borderColor: "rgb(209 213 219)",
                   } as React.CSSProperties
                 }
-                onFocus={(e) => (e.target.style.borderColor = "#3B5998")}
+                onFocus={(e) => (e.target.style.borderColor = primary)}
                 onBlur={(e) =>
                   (e.target.style.borderColor = "rgb(209 213 219)")
                 }
@@ -116,11 +123,11 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
                 className="w-full px-5 py-4 md:px-6 md:py-5 text-base md:text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-4 transition"
                 style={
                   {
-                    "--tw-ring-color": "#3B5998",
+                    "--tw-ring-color": `${primary}55`,
                     borderColor: "rgb(209 213 219)",
                   } as React.CSSProperties
                 }
-                onFocus={(e) => (e.target.style.borderColor = "#3B5998")}
+                onFocus={(e) => (e.target.style.borderColor = primary)}
                 onBlur={(e) =>
                   (e.target.style.borderColor = "rgb(209 213 219)")
                 }
@@ -138,22 +145,27 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
               type="submit"
               disabled={loading}
               className="w-full text-white font-semibold py-4 md:py-5 text-lg md:text-xl rounded-xl transition-all transform active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-              style={{ backgroundColor: "#3B5998" }}
+              style={{ backgroundColor: primary }}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = "#2d4373")
+                (e.currentTarget.style.backgroundColor = primaryHover)
               }
               onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = "#3B5998")
+                (e.currentTarget.style.backgroundColor = primary)
               }
               onMouseDown={(e) =>
-                (e.currentTarget.style.backgroundColor = "#1f2f50")
+                (e.currentTarget.style.backgroundColor = primaryActive)
               }
               onMouseUp={(e) =>
-                (e.currentTarget.style.backgroundColor = "#2d4373")
+                (e.currentTarget.style.backgroundColor = primaryHover)
               }
             >
               {loading ? "Prijava u toku..." : "Prijava"}
             </button>
+
+            <div
+              className="h-1 w-full rounded-full"
+              style={{ background: accent }}
+            />
           </form>
         </div>
       </div>

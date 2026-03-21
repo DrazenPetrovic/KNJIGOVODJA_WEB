@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes softBgShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.login-soft-bg {
+  background: linear-gradient(
+    135deg,
+    rgba(120, 94, 158, 0.16) 0%,
+    rgba(143, 199, 74, 0.14) 50%,
+    rgba(120, 94, 158, 0.1) 100%
+  );
+  background-size: 220% 220%;
+  animation: softBgShift 18s ease-in-out infinite;
+}
