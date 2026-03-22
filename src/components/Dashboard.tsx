@@ -2,12 +2,14 @@ import ReactDOM from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart2,
+  Calculator,
   Calendar,
   ChevronDown,
   ChevronRight,
   FileText,
   FolderArchive,
   LogOut,
+  Receipt,
   Settings,
   ShoppingCart,
 } from "lucide-react";
@@ -29,7 +31,8 @@ type MenuSection =
   | "file-arhiva-2023"
   | "file-arhiva-2022"
   | "file-arhiva-2021"
-  | "pregledi"
+  | "pregledi-racuna"
+  | "pregled-kalkulacija"
   | "narudzbe-pregled"
   | null;
 
@@ -39,13 +42,17 @@ export function Dashboard({
   onLogout,
 }: DashboardProps) {
   const [activeSection, setActiveSection] = useState<MenuSection>(null);
-  const [openMenu, setOpenMenu] = useState<"file" | "narudzbe" | null>(null);
+  const [openMenu, setOpenMenu] = useState<
+    "file" | "pregledi" | "narudzbe" | null
+  >(null);
   const [archiveExpanded, setArchiveExpanded] = useState(false);
   const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
 
   const fileBtnRef = useRef<HTMLButtonElement>(null);
+  const preglediBtnRef = useRef<HTMLButtonElement>(null);
   const narudzbeBtnRef = useRef<HTMLButtonElement>(null);
   const fileDropRef = useRef<HTMLDivElement>(null);
+  const preglediDropRef = useRef<HTMLDivElement>(null);
   const narudzbeDropRef = useRef<HTMLDivElement>(null);
 
   const isAdministrator = vrstaRadnika === 1;
@@ -57,23 +64,33 @@ export function Dashboard({
       const t = e.target as Node;
       const inFile =
         fileBtnRef.current?.contains(t) || fileDropRef.current?.contains(t);
+      const inPregledi =
+        preglediBtnRef.current?.contains(t) ||
+        preglediDropRef.current?.contains(t);
       const inNarudzbe =
         narudzbeBtnRef.current?.contains(t) ||
         narudzbeDropRef.current?.contains(t);
-      if (!inFile && !inNarudzbe) setOpenMenu(null);
+      if (!inFile && !inPregledi && !inNarudzbe) setOpenMenu(null);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const toggleMenu = (menu: "file" | "narudzbe") => {
-    const ref = menu === "file" ? fileBtnRef : narudzbeBtnRef;
+  const toggleMenu = (menu: "file" | "pregledi" | "narudzbe") => {
+    const ref =
+      menu === "file"
+        ? fileBtnRef
+        : menu === "pregledi"
+          ? preglediBtnRef
+          : narudzbeBtnRef;
     if (ref.current) {
       const r = ref.current.getBoundingClientRect();
       setDropPos({ top: r.bottom + 6, left: r.left });
     }
     setOpenMenu((prev) => (prev === menu ? null : menu));
-    if (menu !== "file") setArchiveExpanded(false);
+    if (menu !== "file") {
+      setArchiveExpanded(false);
+    }
   };
 
   const handleSectionChange = (section: MenuSection) => {
@@ -129,7 +146,7 @@ export function Dashboard({
             </div>
             <button
               onClick={onLogout}
-              style={{ background: ACCENT }}
+              style={{ background: PRIMARY_DARK }}
               className="flex items-center gap-2 hover:brightness-110 px-3 py-2 rounded-xl text-sm font-semibold transition-all shadow"
             >
               <LogOut size={15} />
@@ -302,29 +319,141 @@ export function Dashboard({
               </div>
 
               {/* PREGLEDI */}
-              <button
-                onClick={() => handleSectionChange("pregledi")}
-                className={navBtnBase}
-                style={activeSection === "pregledi" ? navBtnActive : {}}
-              >
-                <span
-                  className="flex items-center justify-center w-6 h-6 rounded-lg"
-                  style={{
-                    background:
-                      activeSection === "pregledi"
-                        ? "rgba(255,255,255,0.2)"
-                        : "#ede8f5",
-                  }}
+              <div>
+                <button
+                  ref={preglediBtnRef}
+                  onClick={() => toggleMenu("pregledi")}
+                  className={navBtnBase}
+                  style={
+                    openMenu === "pregledi" ||
+                    activeSection === "pregledi-racuna" ||
+                    activeSection === "pregled-kalkulacija"
+                      ? navBtnActive
+                      : {}
+                  }
                 >
-                  <BarChart2
-                    size={13}
+                  <span
+                    className="flex items-center justify-center w-6 h-6 rounded-lg"
                     style={{
-                      color: activeSection === "pregledi" ? "#fff" : PRIMARY,
+                      background:
+                        openMenu === "pregledi" ||
+                        activeSection === "pregledi-racuna" ||
+                        activeSection === "pregled-kalkulacija"
+                          ? "rgba(255,255,255,0.2)"
+                          : "#ede8f5",
                     }}
+                  >
+                    <BarChart2
+                      size={13}
+                      style={{
+                        color:
+                          openMenu === "pregledi" ||
+                          activeSection === "pregledi-racuna" ||
+                          activeSection === "pregled-kalkulacija"
+                            ? "#fff"
+                            : PRIMARY,
+                      }}
+                    />
+                  </span>
+                  Pregledi
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${openMenu === "pregledi" ? "rotate-180" : ""}`}
                   />
-                </span>
-                Pregledi
-              </button>
+                </button>
+
+                {openMenu === "pregledi" &&
+                  ReactDOM.createPortal(
+                    <div
+                      ref={preglediDropRef}
+                      style={{
+                        position: "fixed",
+                        top: dropPos.top,
+                        left: dropPos.left,
+                        zIndex: 9999,
+                      }}
+                      className="w-56 rounded-2xl border border-gray-100 bg-white shadow-2xl overflow-hidden"
+                    >
+                      <div
+                        className="px-4 py-2.5 text-xs font-bold tracking-widest uppercase flex items-center gap-2"
+                        style={{ color: PRIMARY, background: "#f4f1f9" }}
+                      >
+                        <BarChart2 size={12} />
+                        Pregledi
+                      </div>
+                      <div className="p-2 space-y-0.5">
+                        <button
+                          onClick={() => handleSectionChange("pregledi-racuna")}
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-racuna",
+                          )}
+                          style={
+                            activeSection === "pregledi-racuna"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-racuna"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <Receipt
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-racuna"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Pregledi računa
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregled-kalkulacija")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregled-kalkulacija",
+                          )}
+                          style={
+                            activeSection === "pregled-kalkulacija"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregled-kalkulacija"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <Calculator
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregled-kalkulacija"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Pregled kalkulacija
+                        </button>
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
+              </div>
 
               {/* NARUDZBE */}
               <div>
@@ -480,18 +609,37 @@ export function Dashboard({
           </div>
         )}
 
-        {activeSection === "pregledi" && (
+        {activeSection === "pregledi-racuna" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
             <div className="flex items-center gap-3 mb-4">
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
                 style={{ background: "#ede8f5" }}
               >
-                <BarChart2 size={20} style={{ color: PRIMARY }} />
+                <Receipt size={20} style={{ color: PRIMARY }} />
               </div>
-              <h2 className="text-xl font-bold text-gray-800">Pregledi</h2>
+              <h2 className="text-xl font-bold text-gray-800">
+                Pregledi računa
+              </h2>
             </div>
-            <p className="text-gray-500">Prikazi i izvještaji.</p>
+            <p className="text-gray-500">Prikaz i pretraga računa.</p>
+          </div>
+        )}
+
+        {activeSection === "pregled-kalkulacija" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: "#ede8f5" }}
+              >
+                <Calculator size={20} style={{ color: PRIMARY }} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-800">
+                Pregled kalkulacija
+              </h2>
+            </div>
+            <p className="text-gray-500">Prikaz svih kalkulacija.</p>
           </div>
         )}
 

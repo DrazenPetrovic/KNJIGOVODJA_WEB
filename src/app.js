@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 
 import healthRoutes from "./routes/health.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import preglediRoutes from "./routes/pregledi.routes.js";
 
 export const createApp = () => {
   const app = express();
@@ -20,6 +21,7 @@ export const createApp = () => {
 
   app.use("/api", healthRoutes);
   app.use("/api/auth", authRoutes);
+  app.use("/api/pregledi", preglediRoutes);
 
   return app;
 };
