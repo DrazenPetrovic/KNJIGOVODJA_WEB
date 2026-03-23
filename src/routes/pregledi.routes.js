@@ -4,6 +4,6 @@ import * as PreglediController from "../controllers/pregledi.controller.js";
 const router = Router();
 
 // Pregled svih računa
-router.get("/racuna", PreglediController.getPregledRacuna);
+router.get("/kif", PreglediController.getPregledKIF);
 
 export default router;

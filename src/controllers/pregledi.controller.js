@@ -1,8 +1,8 @@
 import * as PreglediService from "../services/pregledi.service.js";
 
-export const getPregledRacuna = async (req, res) => {
+export const getPregledKIF = async (req, res) => {
   try {
-    const result = await PreglediService.getPregledRacuna();
+    const result = await PreglediService.getPregledKIF();
 
     if (result.success) {
       return res.json({
@@ -14,10 +14,10 @@ export const getPregledRacuna = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Greška pri preuzimanju računa",
+      message: "Greška pri preuzimanju KIF-a",
     });
   } catch (error) {
-    console.error("getPregledRacuna error:", error);
+    console.error("getPregledKIF error:", error);
     return res.status(500).json({
       success: false,
       message: "Greška pri obradi zahteva",
