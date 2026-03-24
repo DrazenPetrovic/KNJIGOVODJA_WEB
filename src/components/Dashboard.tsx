@@ -130,7 +130,7 @@ export function Dashboard({
             />
             <div>
               <p className="text-lg font-bold leading-tight tracking-wide">
-                Kancelarija
+                Knjigovođa
               </p>
               <p className="text-xs text-white/60 hidden sm:block">
                 Karpas Ambalaže

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Filter, Printer, Receipt, Search } from "lucide-react";
+import { PrintModal } from "./PrintModal"; // putanja prema tvom folderu
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
 const PRIMARY = "#785E9E";
@@ -82,6 +83,8 @@ const isOption2 = (row: Pick<KifRow, "PIB" | "Entitet">) => {
 };
 
 export function PregledKif() {
+  const [printOpen, setPrintOpen] = useState(false);
+
   const [rows, setRows] = useState<KifRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +143,28 @@ export function PregledKif() {
       searchTerm,
     });
   };
+
+  const periodLabel = useMemo(() => {
+    if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
+      return new Date(`${appliedFilters.dayDate}T00:00:00`).toLocaleDateString(
+        "sr-Latn-RS",
+      );
+    }
+    if (
+      appliedFilters.mode === "period" &&
+      appliedFilters.periodFrom &&
+      appliedFilters.periodTo
+    ) {
+      const from = new Date(
+        `${appliedFilters.periodFrom}T00:00:00`,
+      ).toLocaleDateString("sr-Latn-RS");
+      const to = new Date(
+        `${appliedFilters.periodTo}T00:00:00`,
+      ).toLocaleDateString("sr-Latn-RS");
+      return `${from} – ${to}`;
+    }
+    return "Sve fakture";
+  }, [appliedFilters]);
 
   const filteredRows = useMemo(() => {
     let temp = [...rows];
@@ -227,12 +252,7 @@ export function PregledKif() {
             </div>
           </div>
           <button
-            onClick={() =>
-              alert(
-                "Pokrenuto je štampanje Knjige izlaznih faktura.\nBroj stavki: " +
-                  filteredRows.length,
-              )
-            }
+            onClick={() => setPrintOpen(true)}
             title="Štampaj"
             className="ml-2 flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#785E9E] hover:text-[#785E9E] transition-colors"
           >
@@ -539,6 +559,14 @@ export function PregledKif() {
           </div>
         )}
       </div>
+
+      <PrintModal
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        rows={filteredRows}
+        totals={totals}
+        periodLabel={periodLabel}
+      />
     </div>
   );
 }

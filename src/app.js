@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import healthRoutes from "./routes/health.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import preglediRoutes from "./routes/pregledi.routes.js";
+import printersRoutes from "./routes/printers.route.js";
 
 export const createApp = () => {
   const app = express();
@@ -19,6 +20,7 @@ export const createApp = () => {
   app.use(express.json());
   app.use(cookieParser());
 
+  app.use("/api/printers", printersRoutes);
   app.use("/api", healthRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/pregledi", preglediRoutes);

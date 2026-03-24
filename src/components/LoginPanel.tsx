@@ -64,7 +64,7 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
           </div>
 
           <h1 className="text-center text-2xl font-bold text-gray-800 mb-2">
-            Kancelarija
+            Knjigovođa
           </h1>
           <p className="text-center mb-8" style={{ color: primary }}>
             Karpas Ambalaže
