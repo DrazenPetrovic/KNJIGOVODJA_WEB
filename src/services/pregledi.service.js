@@ -19,3 +19,19 @@ export const getPregledKIF = async () => {
     };
   });
 };
+
+export const getPregledKUF = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_knjige_ulaznih_faktura()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};

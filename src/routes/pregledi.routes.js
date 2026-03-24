@@ -5,5 +5,5 @@ const router = Router();
 
 // Pregled svih računa
 router.get("/kif", PreglediController.getPregledKIF);
-
+router.get("/kuf", PreglediController.getPregledKUF);
 export default router;

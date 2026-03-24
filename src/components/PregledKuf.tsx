@@ -1,49 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Filter, Printer, Receipt, Search } from "lucide-react";
-import { PrintModal } from "./PrintModal"; // putanja prema tvom folderu
+import { PrintModalKuf } from "./PrintModalKuf";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
 const PRIMARY = "#785E9E";
-const SECONDARY = "#8FC74A";
 
-interface KifRow {
-  sifra_kif: number;
+interface KufRow {
+  redni_broj: number;
   broj_racuna: string;
-  vrsta_racuna: string;
-  datum_racuna: string;
-  sifra_partnera: number;
+  datum_dokumenta: string;
   naziv_partnera: string;
   adresa_partnera: string;
-  Naziv_grada: string;
-  Entitet: string;
-  JIB: string;
-  PIB: string;
-  ukupno: number;
-  rabat_km: number;
-  Osnova_za_obracun_pdv: number;
-  PDV: number;
-  vrednost: number;
-  datum_unosa: string;
-  vrsta_racuna_pod: string;
-  El_Kif_tip: string;
+  pib: string;
+  opis_dokumenta: string;
+  ukupno_bez_pdv: number;
+  iskazani_pdv: number;
+  ulazni_pdv: number;
+  ulazni_pdv_uvozni: number;
+  sifra_drzave: number;
+  vreme_unosa: string;
+  naziv_grada: string;
+  naziv_drzave: string;
+  entitet: string;
+  jib: string;
+  tip_dokumenta_el_kuf: string;
 }
 
 type DateFilterMode = "day" | "period";
 
-// Grupiranje sa , i decimalni sa . (npr. 1,234.56)
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
-};
-
-// MP → blaga ljubičasta tinta (PRIMARY), VP → blaga zelena tinta (SECONDARY)
-const rowStyle = (vrsta: string): React.CSSProperties => {
-  const v = (vrsta || "").toUpperCase();
-  if (v.startsWith("MP")) return { background: `${PRIMARY}18` }; // ~10% opacity
-  if (v.startsWith("VP")) return { background: `${SECONDARY}22` }; // ~13% opacity
-  return {};
 };
 
 const getDateOnly = (dateString: string) => {
@@ -68,24 +57,50 @@ const displayDate = (dateString: string) => {
   return parsed.toLocaleDateString("sr-Latn-RS");
 };
 
-const toText = (value: unknown) => String(value ?? "").trim();
-
 const hasTaxIdValue = (value: unknown) => {
-  const v = toText(value);
+  const v = String(value ?? "").trim();
   return v !== "" && !/^0+$/.test(v);
 };
 
-// PDV obveznici (DA): partner je u sistemu PDV (ima PIB) ili je ino partner (Entitet = "-")
-const isOption2 = (row: Pick<KifRow, "PIB" | "Entitet">) => {
-  const hasPib = hasTaxIdValue(row.PIB);
-  const isInoPartner = toText(row.Entitet) === "-";
-  return hasPib || isInoPartner;
+const isImportRow = (
+  row: Pick<KufRow, "ulazni_pdv_uvozni" | "naziv_drzave" | "sifra_drzave">,
+) => {
+  const uvozniPdv = Number(row.ulazni_pdv_uvozni) || 0;
+  if (uvozniPdv > 0) return true;
+
+  const drzavaRaw = String(row.naziv_drzave || "")
+    .trim()
+    .toLowerCase();
+  const domaceNazivi = new Set([
+    "",
+    "bih",
+    "ba",
+    "bosna i hercegovina",
+    "bosna i hercegovina (bih)",
+    "bosna i hercegovina bih",
+  ]);
+
+  if (domaceNazivi.has(drzavaRaw)) return false;
+
+  const sifraDrzave = Number(row.sifra_drzave);
+  const domaceSifre = new Set([0, 1]);
+  if (Number.isFinite(sifraDrzave) && domaceSifre.has(sifraDrzave)) {
+    return false;
+  }
+
+  return drzavaRaw !== "";
 };
 
-export function PregledKif() {
+const rowStyle = (index: number): React.CSSProperties => {
+  return {
+    background: index % 2 === 0 ? `${PRIMARY}14` : "#ffffff",
+  };
+};
+
+export function PregledKuf() {
   const [printOpen, setPrintOpen] = useState(false);
 
-  const [rows, setRows] = useState<KifRow[]>([]);
+  const [rows, setRows] = useState<KufRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,7 +122,7 @@ export function PregledKif() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_URL}/api/pregledi/kif`, {
+      const response = await fetch(`${API_URL}/api/pregledi/kuf`, {
         credentials: "include",
       });
 
@@ -115,7 +130,7 @@ export function PregledKif() {
 
       if (!response.ok || !payload?.success) {
         throw new Error(
-          payload?.message || "Greška pri učitavanju KIF podataka.",
+          payload?.message || "Greška pri učitavanju KUF podataka.",
         );
       }
 
@@ -171,7 +186,7 @@ export function PregledKif() {
 
     if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
       temp = temp.filter(
-        (row) => getDateOnly(row.datum_racuna) === appliedFilters.dayDate,
+        (row) => getDateOnly(row.datum_dokumenta) === appliedFilters.dayDate,
       );
     }
 
@@ -181,7 +196,7 @@ export function PregledKif() {
       appliedFilters.periodTo
     ) {
       temp = temp.filter((row) => {
-        const date = getDateOnly(row.datum_racuna);
+        const date = getDateOnly(row.datum_dokumenta);
         return (
           Boolean(date) &&
           date >= appliedFilters.periodFrom &&
@@ -194,10 +209,13 @@ export function PregledKif() {
     if (term) {
       temp = temp.filter((row) => {
         const partner =
-          `${row.naziv_partnera || ""} ${row.adresa_partnera || ""} ${row.Naziv_grada || ""}`.toLowerCase();
+          `${row.naziv_partnera || ""} ${row.adresa_partnera || ""} ${row.naziv_grada || ""} ${row.naziv_drzave || ""}`.toLowerCase();
         const doc =
-          `${row.broj_racuna || ""} ${row.vrsta_racuna || ""}`.toLowerCase();
-        return partner.includes(term) || doc.includes(term);
+          `${row.broj_racuna || ""} ${row.opis_dokumenta || ""} ${row.tip_dokumenta_el_kuf || ""}`.toLowerCase();
+        const ids = `${row.pib || ""} ${row.jib || ""}`.toLowerCase();
+        return (
+          partner.includes(term) || doc.includes(term) || ids.includes(term)
+        );
       });
     }
 
@@ -207,29 +225,36 @@ export function PregledKif() {
   const totals = useMemo(() => {
     return filteredRows.reduce(
       (acc, row) => {
-        acc.ukupno += Number(row.ukupno) || 0;
-        acc.rabat += Number(row.rabat_km) || 0;
+        const ukupnoBezPdv = Number(row.ukupno_bez_pdv) || 0;
+        const iskazaniPdv = Number(row.iskazani_pdv) || 0;
+        const ulazniPdv = Number(row.ulazni_pdv) || 0;
+        const ulazniPdvUvozni = Number(row.ulazni_pdv_uvozni) || 0;
+        const importRow = isImportRow(row);
 
-        const osnova = Number(row.Osnova_za_obracun_pdv) || 0;
-        const pdv = Number(row.PDV) || 0;
+        acc.ukupnoBezPdv += ukupnoBezPdv;
+        acc.iskazaniPdv += iskazaniPdv;
+        acc.ulazniPdv += ulazniPdv;
+        acc.ulazniPdvUvozni += ulazniPdvUvozni;
 
-        if (isOption2(row)) {
-          acc.option2.count += 1;
-          acc.option2.osnova += osnova;
-          acc.option2.pdv += pdv;
+        if (importRow) {
+          acc.importFakture.count += 1;
+          acc.importFakture.osnovica += ukupnoBezPdv;
+          acc.importFakture.pdv += ulazniPdvUvozni;
         } else {
-          acc.option1.count += 1;
-          acc.option1.osnova += osnova;
-          acc.option1.pdv += pdv;
+          acc.domaceFakture.count += 1;
+          acc.domaceFakture.osnovica += ukupnoBezPdv;
+          acc.domaceFakture.pdv += ulazniPdv;
         }
 
         return acc;
       },
       {
-        ukupno: 0,
-        rabat: 0,
-        option1: { count: 0, osnova: 0, pdv: 0 },
-        option2: { count: 0, osnova: 0, pdv: 0 },
+        ukupnoBezPdv: 0,
+        iskazaniPdv: 0,
+        ulazniPdv: 0,
+        ulazniPdvUvozni: 0,
+        domaceFakture: { count: 0, osnovica: 0, pdv: 0 },
+        importFakture: { count: 0, osnovica: 0, pdv: 0 },
       },
     );
   }, [filteredRows]);
@@ -247,18 +272,19 @@ export function PregledKif() {
                 <Receipt size={16} style={{ color: PRIMARY }} />
               </span>
               <h2 className="text-base sm:text-lg font-bold text-gray-800">
-                Knjiga izlaznih faktura
+                Knjiga ulaznih faktura
               </h2>
             </div>
+
+            <button
+              onClick={() => setPrintOpen(true)}
+              title="Štampaj"
+              className="ml-2 flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#785E9E] hover:text-[#785E9E] transition-colors"
+            >
+              <Printer size={14} />
+              Štampaj
+            </button>
           </div>
-          <button
-            onClick={() => setPrintOpen(true)}
-            title="Štampaj"
-            className="ml-2 flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#785E9E] hover:text-[#785E9E] transition-colors"
-          >
-            <Printer size={14} />
-            Štampaj
-          </button>
 
           <div className="flex flex-wrap items-end justify-end gap-2">
             <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
@@ -327,7 +353,7 @@ export function PregledKif() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Br fakture, vrsta, partner..."
+                placeholder="Br fakture, opis, partner..."
                 className="w-full rounded-lg border border-gray-300 bg-white pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
               />
             </div>
@@ -347,19 +373,22 @@ export function PregledKif() {
         <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 overflow-hidden">
           <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 bg-[#8FC74A22]">
             {[
-              { label: "PDV obveznici", value: "" },
-              { label: "Br. faktura", value: String(totals.option2.count) },
+              { label: "Uvozne fakture", value: "" },
               {
-                label: "Osnova PDV",
-                value: formatCurrency(totals.option2.osnova) + " KM",
+                label: "Br. faktura",
+                value: String(totals.importFakture.count),
               },
               {
-                label: "PDV",
-                value: formatCurrency(totals.option2.pdv) + " KM",
+                label: "Osnovica",
+                value: formatCurrency(totals.importFakture.osnovica) + " KM",
+              },
+              {
+                label: "Ulazni PDV uvozni",
+                value: formatCurrency(totals.importFakture.pdv) + " KM",
               },
             ].map((s) => (
               <div
-                key={`o2-${s.label}`}
+                key={`import-${s.label}`}
                 className="flex items-center gap-2 px-3 py-1.5"
               >
                 <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold whitespace-nowrap">
@@ -374,19 +403,22 @@ export function PregledKif() {
 
           <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 border-t border-gray-200 bg-[#785E9E18]">
             {[
-              { label: "PDV neobveznici", value: "" },
-              { label: "Br. faktura", value: String(totals.option1.count) },
+              { label: "Domaće fakture", value: "" },
               {
-                label: "Osnova PDV",
-                value: formatCurrency(totals.option1.osnova) + " KM",
+                label: "Br. faktura",
+                value: String(totals.domaceFakture.count),
               },
               {
-                label: "PDV",
-                value: formatCurrency(totals.option1.pdv) + " KM",
+                label: "Osnovica",
+                value: formatCurrency(totals.domaceFakture.osnovica) + " KM",
+              },
+              {
+                label: "Ulazni PDV",
+                value: formatCurrency(totals.domaceFakture.pdv) + " KM",
               },
             ].map((s) => (
               <div
-                key={`o1-${s.label}`}
+                key={`domace-${s.label}`}
                 className="flex items-center gap-2 px-3 py-1.5"
               >
                 <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold whitespace-nowrap">
@@ -401,8 +433,22 @@ export function PregledKif() {
 
           <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 border-t border-gray-200 bg-white">
             {[
-              { label: "Ukupno", value: formatCurrency(totals.ukupno) + " KM" },
-              { label: "Rabat", value: formatCurrency(totals.rabat) + " KM" },
+              {
+                label: "Ukupno bez PDV",
+                value: formatCurrency(totals.ukupnoBezPdv) + " KM",
+              },
+              {
+                label: "Iskazani PDV",
+                value: formatCurrency(totals.iskazaniPdv) + " KM",
+              },
+              {
+                label: "Ulazni PDV",
+                value: formatCurrency(totals.ulazniPdv) + " KM",
+              },
+              {
+                label: "Ulazni PDV uvozni",
+                value: formatCurrency(totals.ulazniPdvUvozni) + " KM",
+              },
               { label: "Sve fakture", value: String(filteredRows.length) },
             ].map((s) => (
               <div
@@ -422,6 +468,11 @@ export function PregledKif() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 text-xs text-gray-600">
+          Period:{" "}
+          <span className="font-semibold text-gray-700">{periodLabel}</span>
+        </div>
+
         {loading ? (
           <div className="p-8 text-center text-gray-500">
             Učitavanje podataka...
@@ -434,68 +485,37 @@ export function PregledKif() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px]">
+            <table className="w-full min-w-[1220px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Šifra KIF
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Br fakture
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Datum
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Partner
-                  </th>
-                  <th className="text-right px-4 py-3" rowSpan={2}>
-                    Ukupno
-                  </th>
-                  <th className="text-right px-4 py-3" rowSpan={2}>
-                    Rabat
-                  </th>
-                  <th
-                    className="text-center px-4 py-2 border-l border-gray-200"
-                    colSpan={2}
-                  >
-                    PDV neobveznici
-                  </th>
-                  <th
-                    className="text-center px-4 py-2 border-l border-gray-200"
-                    colSpan={2}
-                  >
-                    PDV obveznici
-                  </th>
-                </tr>
-                <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="text-right px-4 py-2 border-l border-gray-200">
-                    Osnova PDV
-                  </th>
-                  <th className="text-right px-4 py-2">PDV</th>
-                  <th className="text-right px-4 py-2 border-l border-gray-200">
-                    Osnova PDV
-                  </th>
-                  <th className="text-right px-4 py-2">PDV</th>
+                  <th className="text-left px-4 py-3">R.br</th>
+                  <th className="text-left px-4 py-3">Br fakture</th>
+                  <th className="text-left px-4 py-3">Datum dokumenta</th>
+                  <th className="text-left px-4 py-3">Partner</th>
+                  <th className="text-left px-4 py-3">Opis</th>
+                  <th className="text-right px-4 py-3">Ukupno bez PDV</th>
+                  <th className="text-right px-4 py-3">Iskazani PDV</th>
+                  <th className="text-right px-4 py-3">Ulazni PDV</th>
+                  <th className="text-right px-4 py-3">Ulazni PDV uvozni</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
+                {filteredRows.map((row, index) => (
                   <tr
-                    key={`${row.sifra_kif}-${row.broj_racuna}`}
-                    className="border-b border-gray-100 transition-colors hover:brightness-95"
-                    style={rowStyle(row.vrsta_racuna)}
+                    key={`${row.redni_broj}-${row.broj_racuna}`}
+                    className="border-b border-black/30 transition-colors hover:brightness-95"
+                    style={rowStyle(index)}
                   >
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      {row.sifra_kif}
+                      {row.redni_broj}
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-800">
-                      {[row.vrsta_racuna, row.broj_racuna]
+                      {[row.tip_dokumenta_el_kuf, row.broj_racuna]
                         .filter(Boolean)
                         .join(" - ") || "-"}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      {displayDate(row.datum_racuna)}
+                      {displayDate(row.datum_dokumenta)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       <div className="font-medium text-gray-800">
@@ -503,55 +523,37 @@ export function PregledKif() {
                       </div>
                       <div className="text-xs text-gray-500">
                         {(row.adresa_partnera || "") +
-                          (row.Naziv_grada ? `, ${row.Naziv_grada}` : "")}
+                          (row.naziv_grada ? `, ${row.naziv_grada}` : "") +
+                          (row.entitet ? `, ${row.entitet}` : "")}
                       </div>
-                      {(hasTaxIdValue(row.JIB) || hasTaxIdValue(row.PIB)) && (
+                      <div className="text-xs text-gray-500">
+                        {row.naziv_drzave || "-"}
+                      </div>
+                      {(hasTaxIdValue(row.jib) || hasTaxIdValue(row.pib)) && (
                         <div className="text-xs text-gray-500 mt-0.5">
-                          {hasTaxIdValue(row.JIB) ? `JIB: ${row.JIB}` : ""}
-                          {hasTaxIdValue(row.JIB) && hasTaxIdValue(row.PIB)
+                          {hasTaxIdValue(row.jib) ? `JIB: ${row.jib}` : ""}
+                          {hasTaxIdValue(row.jib) && hasTaxIdValue(row.pib)
                             ? " | "
                             : ""}
-                          {hasTaxIdValue(row.PIB) ? `PIB: ${row.PIB}` : ""}
+                          {hasTaxIdValue(row.pib) ? `PIB: ${row.pib}` : ""}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {formatCurrency(Number(row.ukupno))}
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {row.opis_dokumenta || "-"}
                     </td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {formatCurrency(Number(row.rabat_km))}
+                      {formatCurrency(Number(row.ukupno_bez_pdv))}
                     </td>
-                    {isOption2(row) ? (
-                      <>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200">
-                          {formatCurrency(Number(row.Osnova_za_obracun_pdv))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700">
-                          {formatCurrency(Number(row.PDV))}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200">
-                          {formatCurrency(Number(row.Osnova_za_obracun_pdv))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700">
-                          {formatCurrency(Number(row.PDV))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400">
-                          {formatCurrency(0)}
-                        </td>
-                      </>
-                    )}
+                    <td className="px-4 py-3 text-sm text-right text-gray-700">
+                      {formatCurrency(Number(row.iskazani_pdv))}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700">
+                      {formatCurrency(Number(row.ulazni_pdv))}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700">
+                      {formatCurrency(Number(row.ulazni_pdv_uvozni))}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -560,7 +562,7 @@ export function PregledKif() {
         )}
       </div>
 
-      <PrintModal
+      <PrintModalKuf
         open={printOpen}
         onClose={() => setPrintOpen(false)}
         rows={filteredRows}

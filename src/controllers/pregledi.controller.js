@@ -24,3 +24,28 @@ export const getPregledKIF = async (req, res) => {
     });
   }
 };
+
+export const getPregledKUF = async (req, res) => {
+  try {
+    const result = await PreglediService.getPregledKUF();
+
+    if (result.success) {
+      return res.json({
+        success: true,
+        data: result.data,
+        count: result.count,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri preuzimanju KUF-a",
+    });
+  } catch (error) {
+    console.error("getPregledKUF error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri obradi zahteva",
+    });
+  }
+};

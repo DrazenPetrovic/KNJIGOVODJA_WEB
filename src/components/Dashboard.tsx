@@ -13,6 +13,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { PregledKif } from "./PregledKif";
+import { PregledKuf } from "./PregledKuf";
 
 const PRIMARY = "#785E9E";
 const PRIMARY_DARK = "#604880";
@@ -647,20 +648,7 @@ export function Dashboard({
         {activeSection === "pregledi-knjiga-izlaznih" && <PregledKif />}
 
         {activeSection === "pregledi-knjiga-ulaznih" && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: "#ede8f5" }}
-              >
-                <FileText size={20} style={{ color: PRIMARY }} />
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Knjiga ulaznih faktura
-              </h2>
-            </div>
-            <p className="text-gray-500">Prikaz ulaznih faktura.</p>
-          </div>
+          <PregledKuf />
         )}
 
         {activeSection === "pregledi-trgovacka-knjiga" && (
