@@ -35,3 +35,19 @@ export const getPregledKUF = async () => {
     };
   });
 };
+
+export const getPregledTrgovackeKnjigeMaloprodaje = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_trgovacke_knjige_maloprodaje()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};

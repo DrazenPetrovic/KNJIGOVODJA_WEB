@@ -6,4 +6,8 @@ const router = Router();
 // Pregled svih računa
 router.get("/kif", PreglediController.getPregledKIF);
 router.get("/kuf", PreglediController.getPregledKUF);
+router.get(
+  "/trgovacka-knjiga-maloprodaje",
+  PreglediController.getPregledTrgovackeKnjigeMaloprodaje,
+);
 export default router;

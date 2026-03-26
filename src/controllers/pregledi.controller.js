@@ -49,3 +49,28 @@ export const getPregledKUF = async (req, res) => {
     });
   }
 };
+
+export const getPregledTrgovackeKnjigeMaloprodaje = async (req, res) => {
+  try {
+    const result = await PreglediService.getPregledTrgovackeKnjigeMaloprodaje();
+
+    if (result.success) {
+      return res.json({
+        success: true,
+        data: result.data,
+        count: result.count,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri preuzimanju trgovacke knjige maloprodaje",
+    });
+  } catch (error) {
+    console.error("getPregledTrgovackeKnjigeMaloprodaje error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri obradi zahteva",
+    });
+  }
+};
