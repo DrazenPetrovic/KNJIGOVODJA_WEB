@@ -10,4 +10,10 @@ router.get(
   "/trgovacka-knjiga-maloprodaje",
   PreglediController.getPregledTrgovackeKnjigeMaloprodaje,
 );
+router.get(
+  "/kalkulacija-sirovine",
+  PreglediController.getPregledKalkulacijaSirovine,
+);
+router.get("/kalkulacija-robe", PreglediController.getPregledKalkulacijaRobe);
+
 export default router;

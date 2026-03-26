@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { PregledKif } from "./PregledKif";
 import { PregledKuf } from "./PregledKuf";
+import { TrgovackaKnjigaMaloprodaje } from "./TrgovackaKnjigaMaloprodaje";
+import { KalkulacijaSirovine } from "./KalkulacijaSirovine";
+import { KalkulacijaRobe } from "./KalkulacijaRobe";
 
 const PRIMARY = "#785E9E";
 const PRIMARY_DARK = "#604880";
@@ -35,6 +38,8 @@ type MenuSection =
   | "pregledi-knjiga-izlaznih"
   | "pregledi-knjiga-ulaznih"
   | "pregledi-trgovacka-knjiga"
+  | "pregledi-kalkulacija-sirovine"
+  | "pregledi-kalkulacija-robe"
   | "narudzbe-pregled"
   | null;
 
@@ -371,7 +376,7 @@ export function Dashboard({
                         left: dropPos.left,
                         zIndex: 9999,
                       }}
-                      className="w-56 rounded-2xl border border-gray-100 bg-white shadow-2xl overflow-hidden"
+                      className="w-64 rounded-2xl border border-gray-100 bg-white shadow-2xl overflow-hidden"
                     >
                       <div
                         className="px-4 py-2.5 text-xs font-bold tracking-widest uppercase flex items-center gap-2"
@@ -484,6 +489,78 @@ export function Dashboard({
                             />
                           </span>
                           Trgovačka knjiga
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-kalkulacija-sirovine")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-kalkulacija-sirovine",
+                          )}
+                          style={
+                            activeSection === "pregledi-kalkulacija-sirovine"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection ===
+                                "pregledi-kalkulacija-sirovine"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <FileText
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection ===
+                                  "pregledi-kalkulacija-sirovine"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Kalkulacija sirovina
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-kalkulacija-robe")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-kalkulacija-robe",
+                          )}
+                          style={
+                            activeSection === "pregledi-kalkulacija-robe"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-kalkulacija-robe"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <FileText
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-kalkulacija-robe"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Kalkulacija roba
                         </button>
                       </div>
                     </div>,
@@ -647,26 +724,17 @@ export function Dashboard({
 
         {activeSection === "pregledi-knjiga-izlaznih" && <PregledKif />}
 
-        {activeSection === "pregledi-knjiga-ulaznih" && (
-          <PregledKuf />
-        )}
+        {activeSection === "pregledi-knjiga-ulaznih" && <PregledKuf />}
 
         {activeSection === "pregledi-trgovacka-knjiga" && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: "#edf7e0" }}
-              >
-                <ShoppingCart size={20} style={{ color: ACCENT }} />
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Trgovačka knjiga
-              </h2>
-            </div>
-            <p className="text-gray-500">Pregled stavki trgovačke knjige.</p>
-          </div>
+          <TrgovackaKnjigaMaloprodaje />
         )}
+
+        {activeSection === "pregledi-kalkulacija-sirovine" && (
+          <KalkulacijaSirovine />
+        )}
+
+        {activeSection === "pregledi-kalkulacija-robe" && <KalkulacijaRobe />}
 
         {activeSection === "narudzbe-pregled" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">

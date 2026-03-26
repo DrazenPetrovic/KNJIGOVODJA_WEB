@@ -51,3 +51,35 @@ export const getPregledTrgovackeKnjigeMaloprodaje = async () => {
     };
   });
 };
+
+export const getPregledKalkulacijaSirovine = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_kalkulacija_sirovine()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};
+
+export const getPregledKalkulacijaRobe = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_kalkulacija_robe()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};
