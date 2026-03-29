@@ -83,3 +83,19 @@ export const getPregledKalkulacijaRobe = async () => {
     };
   });
 };
+
+export const getPregledMjesecniPrihodi = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_mjesecnih_prihoda()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};

@@ -15,5 +15,5 @@ router.get(
   PreglediController.getPregledKalkulacijaSirovine,
 );
 router.get("/kalkulacija-robe", PreglediController.getPregledKalkulacijaRobe);
-
+router.get("/mjesecni-prihodi", PreglediController.getPregledMjesecniPrihodi);
 export default router;

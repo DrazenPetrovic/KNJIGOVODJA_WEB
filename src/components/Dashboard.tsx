@@ -17,6 +17,7 @@ import { PregledKuf } from "./PregledKuf";
 import { TrgovackaKnjigaMaloprodaje } from "./TrgovackaKnjigaMaloprodaje";
 import { KalkulacijaSirovine } from "./KalkulacijaSirovine";
 import { KalkulacijaRobe } from "./KalkulacijaRobe";
+import { MjesecniPrihodi } from "./MjesecniPrihodi";
 
 const PRIMARY = "#785E9E";
 const PRIMARY_DARK = "#604880";
@@ -40,6 +41,7 @@ type MenuSection =
   | "pregledi-trgovacka-knjiga"
   | "pregledi-kalkulacija-sirovine"
   | "pregledi-kalkulacija-robe"
+  | "pregledi-mjesecni-prihodi"
   | "narudzbe-pregled"
   | null;
 
@@ -562,6 +564,41 @@ export function Dashboard({
                           </span>
                           Kalkulacija roba
                         </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-mjesecni-prihodi")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-mjesecni-prihodi",
+                          )}
+                          style={
+                            activeSection === "pregledi-mjesecni-prihodi"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-mjesecni-prihodi"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <BarChart2
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-mjesecni-prihodi"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Mjesečni prihodi
+                        </button>
                       </div>
                     </div>,
                     document.body,
@@ -735,6 +772,8 @@ export function Dashboard({
         )}
 
         {activeSection === "pregledi-kalkulacija-robe" && <KalkulacijaRobe />}
+
+        {activeSection === "pregledi-mjesecni-prihodi" && <MjesecniPrihodi />}
 
         {activeSection === "narudzbe-pregled" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
