@@ -99,3 +99,33 @@ export const getPregledMjesecniPrihodi = async () => {
     };
   });
 };
+
+export const getPregledNivelacija = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute("CALL sp_pregled_nivelacije()");
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};
+
+export const getPregledUtroskaMaterijala = async () => {
+  return withConnection(async (connection) => {
+    const [rows] = await connection.execute(
+      "CALL sp_pregled_utroska_materijala()",
+    );
+
+    const racuni = rows?.[0] || [];
+
+    return {
+      success: true,
+      data: racuni,
+      count: racuni.length,
+    };
+  });
+};

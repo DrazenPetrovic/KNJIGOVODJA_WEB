@@ -18,6 +18,8 @@ import { TrgovackaKnjigaMaloprodaje } from "./TrgovackaKnjigaMaloprodaje";
 import { KalkulacijaSirovine } from "./KalkulacijaSirovine";
 import { KalkulacijaRobe } from "./KalkulacijaRobe";
 import { MjesecniPrihodi } from "./MjesecniPrihodi";
+import { Nivelacije } from "./Nivelacije";
+import { UtrosakMaterijala } from "./UtrosakMaterijala";
 
 const PRIMARY = "#785E9E";
 const PRIMARY_DARK = "#604880";
@@ -42,6 +44,9 @@ type MenuSection =
   | "pregledi-kalkulacija-sirovine"
   | "pregledi-kalkulacija-robe"
   | "pregledi-mjesecni-prihodi"
+  | "pregledi-nivelacija-proizvoda"
+  | "pregledi-nivelacija-robe"
+  | "pregledi-utrosak-materijala"
   | "narudzbe-pregled"
   | null;
 
@@ -599,82 +604,16 @@ export function Dashboard({
                           </span>
                           Mjesečni prihodi
                         </button>
-                      </div>
-                    </div>,
-                    document.body,
-                  )}
-              </div>
 
-              {/* NARUDZBE */}
-              <div>
-                <button
-                  ref={narudzbeBtnRef}
-                  onClick={() => toggleMenu("narudzbe")}
-                  className={navBtnBase}
-                  style={
-                    openMenu === "narudzbe" ||
-                    activeSection === "narudzbe-pregled"
-                      ? navBtnActive
-                      : {}
-                  }
-                >
-                  <span
-                    className="flex items-center justify-center w-6 h-6 rounded-lg"
-                    style={{
-                      background:
-                        openMenu === "narudzbe" ||
-                        activeSection === "narudzbe-pregled"
-                          ? "rgba(255,255,255,0.2)"
-                          : "#edf7e0",
-                    }}
-                  >
-                    <ShoppingCart
-                      size={13}
-                      style={{
-                        color:
-                          openMenu === "narudzbe" ||
-                          activeSection === "narudzbe-pregled"
-                            ? "#fff"
-                            : ACCENT,
-                      }}
-                    />
-                  </span>
-                  Narudžbe
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform duration-200 ${openMenu === "narudzbe" ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                {openMenu === "narudzbe" &&
-                  ReactDOM.createPortal(
-                    <div
-                      ref={narudzbeDropRef}
-                      style={{
-                        position: "fixed",
-                        top: dropPos.top,
-                        left: dropPos.left,
-                        zIndex: 9999,
-                      }}
-                      className="w-52 rounded-2xl border border-gray-100 bg-white shadow-2xl overflow-hidden"
-                    >
-                      <div
-                        className="px-4 py-2.5 text-xs font-bold tracking-widest uppercase flex items-center gap-2"
-                        style={{ color: ACCENT, background: "#edf7e0" }}
-                      >
-                        <ShoppingCart size={12} />
-                        Narudžbe
-                      </div>
-                      <div className="p-2">
                         <button
                           onClick={() =>
-                            handleSectionChange("narudzbe-pregled")
+                            handleSectionChange("pregledi-nivelacija-proizvoda")
                           }
                           className={dropdownItemClass(
-                            activeSection === "narudzbe-pregled",
+                            activeSection === "pregledi-nivelacija-proizvoda",
                           )}
                           style={
-                            activeSection === "narudzbe-pregled"
+                            activeSection === "pregledi-nivelacija-proizvoda"
                               ? { background: PRIMARY }
                               : {}
                           }
@@ -683,28 +622,103 @@ export function Dashboard({
                             className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
                             style={{
                               background:
-                                activeSection === "narudzbe-pregled"
+                                activeSection ===
+                                "pregledi-nivelacija-proizvoda"
                                   ? "rgba(255,255,255,0.2)"
-                                  : "#edf7e0",
+                                  : "#ede8f5",
                             }}
                           >
-                            <ShoppingCart
+                            <FileText
                               size={13}
                               style={{
                                 color:
-                                  activeSection === "narudzbe-pregled"
+                                  activeSection ===
+                                  "pregledi-nivelacija-proizvoda"
                                     ? "#fff"
-                                    : ACCENT,
+                                    : PRIMARY,
                               }}
                             />
                           </span>
-                          Pregled narudžbi
+                          Nivelacija proizvoda
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-nivelacija-robe")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-nivelacija-robe",
+                          )}
+                          style={
+                            activeSection === "pregledi-nivelacija-robe"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-nivelacija-robe"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <FileText
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-nivelacija-robe"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Nivelacija robe
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-utrosak-materijala")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-utrosak-materijala",
+                          )}
+                          style={
+                            activeSection === "pregledi-utrosak-materijala"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-utrosak-materijala"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <FileText
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection ===
+                                  "pregledi-utrosak-materijala"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Utrošak materijala
                         </button>
                       </div>
                     </div>,
                     document.body,
                   )}
               </div>
+
+              {/* NARUDZBE */}
             </>
           )}
         </div>
@@ -774,6 +788,18 @@ export function Dashboard({
         {activeSection === "pregledi-kalkulacija-robe" && <KalkulacijaRobe />}
 
         {activeSection === "pregledi-mjesecni-prihodi" && <MjesecniPrihodi />}
+
+        {activeSection === "pregledi-nivelacija-proizvoda" && (
+          <Nivelacije mode="proizvodi" />
+        )}
+
+        {activeSection === "pregledi-nivelacija-robe" && (
+          <Nivelacije mode="roba" />
+        )}
+
+        {activeSection === "pregledi-utrosak-materijala" && (
+          <UtrosakMaterijala />
+        )}
 
         {activeSection === "narudzbe-pregled" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">

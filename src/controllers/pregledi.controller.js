@@ -125,7 +125,6 @@ export const getPregledKalkulacijaRobe = async (req, res) => {
   }
 };
 
-
 export const getPregledMjesecniPrihodi = async (req, res) => {
   try {
     const result = await PreglediService.getPregledMjesecniPrihodi();
@@ -144,6 +143,56 @@ export const getPregledMjesecniPrihodi = async (req, res) => {
     });
   } catch (error) {
     console.error("getPregledMjesecniPrihodi error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri obradi zahteva",
+    });
+  }
+};
+
+export const getPregledNivelacija = async (req, res) => {
+  try {
+    const result = await PreglediService.getPregledNivelacija();
+
+    if (result.success) {
+      return res.json({
+        success: true,
+        data: result.data,
+        count: result.count,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri preuzimanju nivelacije",
+    });
+  } catch (error) {
+    console.error("getPregledNivelacija error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri obradi zahteva",
+    });
+  }
+};
+
+export const getPregledUtroskaMaterijala = async (req, res) => {
+  try {
+    const result = await PreglediService.getPregledUtroskaMaterijala();
+
+    if (result.success) {
+      return res.json({
+        success: true,
+        data: result.data,
+        count: result.count,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri preuzimanju utroška materijala",
+    });
+  } catch (error) {
+    console.error("getPregledUtroskaMaterijala error:", error);
     return res.status(500).json({
       success: false,
       message: "Greška pri obradi zahteva",
