@@ -44,7 +44,10 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
   return (
     <div className="min-h-screen login-soft-bg flex items-center justify-center p-4 md:p-6 lg:p-8">
       <div className="w-full max-w-md md:max-w-lg lg:max-w-xl">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 lg:p-12 border-2 border-transparent">
+        <div
+          className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 lg:p-12 border-t-4 border-b-4 border-x-0"
+          style={{ borderTopColor: accent, borderBottomColor: accent }}
+        >
           <div className="flex justify-center mb-8">
             <div className="w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
               <img
