@@ -2,8 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  base: mode === "production" ? "/knjigovodja/" : "/",
   optimizeDeps: {
     exclude: ["lucide-react"],
   },
@@ -12,7 +13,11 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: "http://localhost:3003",
+        changeOrigin: true,
       },
     },
   },
-});
+  preview: {
+    port: 3003,
+  },
+}));

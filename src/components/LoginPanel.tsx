@@ -51,8 +51,8 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
           <div className="flex justify-center mb-8">
             <div className="w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
               <img
-                src="/foto/karpas_logo_software.png"
-                alt="Karpas Logo"
+                src="/foto/IKONA.png"
+                alt="Karpas Ambalaže"
                 className="w-full h-full object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -65,13 +65,6 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
               />
             </div>
           </div>
-
-          <h1 className="text-center text-2xl font-bold text-gray-800 mb-2">
-            Knjigovođa
-          </h1>
-          <p className="text-center mb-8" style={{ color: primary }}>
-            Karpas Ambalaže
-          </p>
 
           <form
             onSubmit={handleLogin}

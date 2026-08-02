@@ -4,10 +4,11 @@ import { withConnection } from "./db.service.js";
  * Pregled svih računa sa detaljima
  * @returns {Promise} Niz objekata sa podacima o računima
  */
-export const getPregledKIF = async () => {
+export const getPregledKIF = async (datumOd, datumDo) => {
   return withConnection(async (connection) => {
     const [rows] = await connection.execute(
-      "CALL sp_pregled_knjiga_izlaznih_faktura()",
+      "CALL sp_knjiga_izlaznih_faktura_pregled_filter(?, ?)",
+      [datumOd, datumDo],
     );
 
     const racuni = rows?.[0] || [];

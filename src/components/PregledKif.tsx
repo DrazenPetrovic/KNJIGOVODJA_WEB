@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Filter, Printer, Receipt, Search } from "lucide-react";
+import {
+  CalendarDays,
+  Filter,
+  Loader2,
+  Printer,
+  Receipt,
+  Search,
+} from "lucide-react";
+import { FixedSizeList, ListChildComponentProps } from "react-window";
 import { PrintModal } from "./PrintModal"; // putanja prema tvom folderu
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
@@ -14,18 +22,18 @@ interface KifRow {
   sifra_partnera: number;
   naziv_partnera: string;
   adresa_partnera: string;
-  Naziv_grada: string;
-  Entitet: string;
-  JIB: string;
-  PIB: string;
+  naziv_grada: string;
+  entitet: string;
+  jib: string;
+  pib: string;
   ukupno: number;
   rabat_km: number;
-  Osnova_za_obracun_pdv: number;
-  PDV: number;
+  osnova_za_obracun_pdv: number;
+  pdv: number;
   vrednost: number;
   datum_unosa: string;
   vrsta_racuna_pod: string;
-  El_Kif_tip: string;
+  el_kif_tip: string;
 }
 
 type DateFilterMode = "day" | "period";
@@ -68,6 +76,11 @@ const displayDate = (dateString: string) => {
   return parsed.toLocaleDateString("sr-Latn-RS");
 };
 
+const formatDuration = (ms: number) => {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+};
+
 const toText = (value: unknown) => String(value ?? "").trim();
 
 const hasTaxIdValue = (value: unknown) => {
@@ -76,11 +89,114 @@ const hasTaxIdValue = (value: unknown) => {
 };
 
 // PDV obveznici (DA): partner je u sistemu PDV (ima PIB) ili je ino partner (Entitet = "-")
-const isOption2 = (row: Pick<KifRow, "PIB" | "Entitet">) => {
-  const hasPib = hasTaxIdValue(row.PIB);
-  const isInoPartner = toText(row.Entitet) === "-";
+const isOption2 = (row: Pick<KifRow, "pib" | "entitet">) => {
+  const hasPib = hasTaxIdValue(row.pib);
+  const isInoPartner = toText(row.entitet) === "-";
   return hasPib || isInoPartner;
 };
+
+// Podrazumijevani period: danas unazad 32 dana (operater ga po potrebi proširi kroz filter)
+const dateToInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultRange = () => {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 32);
+  return { from: dateToInputValue(from), to: dateToInputValue(to) };
+};
+
+const DEFAULT_RANGE = getDefaultRange();
+
+// ─── Grid kolone (dijele header i virtualizovane redove) ─────────────────────
+const GRID_COLS =
+  "90px 150px 110px minmax(220px,1fr) 110px 100px 110px 90px 110px 90px";
+const GRID_MIN_WIDTH = 1180;
+const ROW_HEIGHT = 76;
+
+function KifRowItem({
+  index,
+  style,
+  data,
+}: ListChildComponentProps<KifRow[]>) {
+  const row = data[index];
+  const opt2 = isOption2(row);
+
+  return (
+    <div
+      style={{ ...style, ...rowStyle(row.vrsta_racuna), gridTemplateColumns: GRID_COLS }}
+      className="grid border-b border-gray-100 transition-colors hover:brightness-95"
+    >
+      <div className="px-4 py-3 text-sm text-gray-700 truncate self-center">
+        {row.sifra_kif}
+      </div>
+      <div className="px-4 py-3 text-sm font-semibold text-gray-800 truncate self-center">
+        {[row.vrsta_racuna, row.broj_racuna].filter(Boolean).join(" - ") ||
+          "-"}
+      </div>
+      <div className="px-4 py-3 text-sm text-gray-700 self-center">
+        {displayDate(row.datum_racuna)}
+      </div>
+      <div className="px-4 py-3 text-sm text-gray-700 overflow-hidden self-center">
+        <div className="font-medium text-gray-800 truncate">
+          {row.naziv_partnera || "-"}
+        </div>
+        <div className="text-xs text-gray-500 truncate">
+          {(row.adresa_partnera || "") +
+            (row.naziv_grada ? `, ${row.naziv_grada}` : "")}
+        </div>
+        {(hasTaxIdValue(row.jib) || hasTaxIdValue(row.pib)) && (
+          <div className="text-xs text-gray-500 mt-0.5 truncate">
+            {hasTaxIdValue(row.jib) ? `JIB: ${row.jib}` : ""}
+            {hasTaxIdValue(row.jib) && hasTaxIdValue(row.pib) ? " | " : ""}
+            {hasTaxIdValue(row.pib) ? `PIB: ${row.pib}` : ""}
+          </div>
+        )}
+      </div>
+      <div className="px-4 py-3 text-sm text-right text-gray-700 self-center">
+        {formatCurrency(Number(row.ukupno))}
+      </div>
+      <div className="px-4 py-3 text-sm text-right text-gray-700 self-center">
+        {formatCurrency(Number(row.rabat_km))}
+      </div>
+      {opt2 ? (
+        <>
+          <div className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200 self-center">
+            {formatCurrency(0)}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-400 self-center">
+            {formatCurrency(0)}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200 self-center">
+            {formatCurrency(Number(row.osnova_za_obracun_pdv))}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-700 self-center">
+            {formatCurrency(Number(row.pdv))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200 self-center">
+            {formatCurrency(Number(row.osnova_za_obracun_pdv))}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-700 self-center">
+            {formatCurrency(Number(row.pdv))}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200 self-center">
+            {formatCurrency(0)}
+          </div>
+          <div className="px-4 py-3 text-sm text-right text-gray-400 self-center">
+            {formatCurrency(0)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function PregledKif() {
   const [printOpen, setPrintOpen] = useState(false);
@@ -88,28 +204,34 @@ export function PregledKif() {
   const [rows, setRows] = useState<KifRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadTimeMs, setLoadTimeMs] = useState<number | null>(null);
 
   const [filterMode, setFilterMode] = useState<DateFilterMode>("period");
   const [dayDate, setDayDate] = useState("");
-  const [periodFrom, setPeriodFrom] = useState("");
-  const [periodTo, setPeriodTo] = useState("");
+  const [periodFrom, setPeriodFrom] = useState(DEFAULT_RANGE.from);
+  const [periodTo, setPeriodTo] = useState(DEFAULT_RANGE.to);
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedFilters, setAppliedFilters] = useState({
     mode: "period" as DateFilterMode,
     dayDate: "",
-    periodFrom: "",
-    periodTo: "",
+    periodFrom: DEFAULT_RANGE.from,
+    periodTo: DEFAULT_RANGE.to,
     searchTerm: "",
   });
 
-  const fetchData = async () => {
+  // Procedura sad prima opseg datuma - server vraća samo taj period, ne cijelu istoriju
+  const fetchData = async (datumOd: string, datumDo: string) => {
+    const startedAt = performance.now();
     try {
       setLoading(true);
       setError(null);
+      setLoadTimeMs(null);
 
-      const response = await fetch(`${API_URL}/api/pregledi/kif`, {
-        credentials: "include",
-      });
+      const params = new URLSearchParams({ datumOd, datumDo });
+      const response = await fetch(
+        `${API_URL}/api/pregledi/kif?${params.toString()}`,
+        { credentials: "include" },
+      );
 
       const payload = await response.json();
 
@@ -126,15 +248,19 @@ export function PregledKif() {
       setError(message);
       setRows([]);
     } finally {
+      setLoadTimeMs(performance.now() - startedAt);
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(DEFAULT_RANGE.from, DEFAULT_RANGE.to);
   }, []);
 
   const applyFilters = () => {
+    const datumOd = filterMode === "day" ? dayDate : periodFrom;
+    const datumDo = filterMode === "day" ? dayDate : periodTo;
+
     setAppliedFilters({
       mode: filterMode,
       dayDate,
@@ -142,7 +268,14 @@ export function PregledKif() {
       periodTo,
       searchTerm,
     });
+
+    if (datumOd && datumDo) {
+      fetchData(datumOd, datumDo);
+    }
   };
+
+  const filtersMissingDates =
+    filterMode === "day" ? !dayDate : !periodFrom || !periodTo;
 
   const periodLabel = useMemo(() => {
     if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
@@ -166,43 +299,20 @@ export function PregledKif() {
     return "Sve fakture";
   }, [appliedFilters]);
 
+  // Datumski opseg se filtrira na serveru (procedura); ovdje ostaje samo tekstualna pretraga
+  // preko već učitanog perioda.
   const filteredRows = useMemo(() => {
-    let temp = [...rows];
-
-    if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
-      temp = temp.filter(
-        (row) => getDateOnly(row.datum_racuna) === appliedFilters.dayDate,
-      );
-    }
-
-    if (
-      appliedFilters.mode === "period" &&
-      appliedFilters.periodFrom &&
-      appliedFilters.periodTo
-    ) {
-      temp = temp.filter((row) => {
-        const date = getDateOnly(row.datum_racuna);
-        return (
-          Boolean(date) &&
-          date >= appliedFilters.periodFrom &&
-          date <= appliedFilters.periodTo
-        );
-      });
-    }
-
     const term = appliedFilters.searchTerm.trim().toLowerCase();
-    if (term) {
-      temp = temp.filter((row) => {
-        const partner =
-          `${row.naziv_partnera || ""} ${row.adresa_partnera || ""} ${row.Naziv_grada || ""}`.toLowerCase();
-        const doc =
-          `${row.broj_racuna || ""} ${row.vrsta_racuna || ""}`.toLowerCase();
-        return partner.includes(term) || doc.includes(term);
-      });
-    }
+    if (!term) return rows;
 
-    return temp;
-  }, [rows, appliedFilters]);
+    return rows.filter((row) => {
+      const partner =
+        `${row.naziv_partnera || ""} ${row.adresa_partnera || ""} ${row.naziv_grada || ""}`.toLowerCase();
+      const doc =
+        `${row.broj_racuna || ""} ${row.vrsta_racuna || ""}`.toLowerCase();
+      return partner.includes(term) || doc.includes(term);
+    });
+  }, [rows, appliedFilters.searchTerm]);
 
   const totals = useMemo(() => {
     return filteredRows.reduce(
@@ -210,8 +320,8 @@ export function PregledKif() {
         acc.ukupno += Number(row.ukupno) || 0;
         acc.rabat += Number(row.rabat_km) || 0;
 
-        const osnova = Number(row.Osnova_za_obracun_pdv) || 0;
-        const pdv = Number(row.PDV) || 0;
+        const osnova = Number(row.osnova_za_obracun_pdv) || 0;
+        const pdv = Number(row.pdv) || 0;
 
         if (isOption2(row)) {
           acc.option2.count += 1;
@@ -233,6 +343,11 @@ export function PregledKif() {
       },
     );
   }, [filteredRows]);
+
+  const listHeight = Math.min(
+    640,
+    Math.max(ROW_HEIGHT * 3, filteredRows.length * ROW_HEIGHT),
+  );
 
   return (
     <div className="space-y-5">
@@ -259,6 +374,19 @@ export function PregledKif() {
             <Printer size={14} />
             Štampaj
           </button>
+
+          {loading ? (
+            <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+              <Loader2 size={13} className="animate-spin" />
+              Učitavanje...
+            </span>
+          ) : (
+            loadTimeMs !== null && (
+              <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                Učitano za {formatDuration(loadTimeMs)}
+              </span>
+            )
+          )}
 
           <div className="flex flex-wrap items-end justify-end gap-2">
             <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
@@ -334,9 +462,9 @@ export function PregledKif() {
 
             <button
               onClick={applyFilters}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ background: PRIMARY, color: "#fff" }}
-              disabled={loading}
+              disabled={loading || filtersMissingDates}
             >
               <Filter size={14} />
               Primijeni filtere
@@ -423,7 +551,12 @@ export function PregledKif() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 flex flex-col items-center justify-center gap-2 text-gray-500">
+            <Loader2
+              size={24}
+              className="animate-spin"
+              style={{ color: PRIMARY }}
+            />
             Učitavanje podataka...
           </div>
         ) : error ? (
@@ -434,128 +567,38 @@ export function PregledKif() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px]">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Šifra KIF
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Br fakture
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Datum
-                  </th>
-                  <th className="text-left px-4 py-3" rowSpan={2}>
-                    Partner
-                  </th>
-                  <th className="text-right px-4 py-3" rowSpan={2}>
-                    Ukupno
-                  </th>
-                  <th className="text-right px-4 py-3" rowSpan={2}>
-                    Rabat
-                  </th>
-                  <th
-                    className="text-center px-4 py-2 border-l border-gray-200"
-                    colSpan={2}
-                  >
-                    PDV neobveznici
-                  </th>
-                  <th
-                    className="text-center px-4 py-2 border-l border-gray-200"
-                    colSpan={2}
-                  >
-                    PDV obveznici
-                  </th>
-                </tr>
-                <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="text-right px-4 py-2 border-l border-gray-200">
-                    Osnova PDV
-                  </th>
-                  <th className="text-right px-4 py-2">PDV</th>
-                  <th className="text-right px-4 py-2 border-l border-gray-200">
-                    Osnova PDV
-                  </th>
-                  <th className="text-right px-4 py-2">PDV</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => (
-                  <tr
-                    key={`${row.sifra_kif}-${row.broj_racuna}`}
-                    className="border-b border-gray-100 transition-colors hover:brightness-95"
-                    style={rowStyle(row.vrsta_racuna)}
-                  >
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {row.sifra_kif}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-800">
-                      {[row.vrsta_racuna, row.broj_racuna]
-                        .filter(Boolean)
-                        .join(" - ") || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {displayDate(row.datum_racuna)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      <div className="font-medium text-gray-800">
-                        {row.naziv_partnera || "-"}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {(row.adresa_partnera || "") +
-                          (row.Naziv_grada ? `, ${row.Naziv_grada}` : "")}
-                      </div>
-                      {(hasTaxIdValue(row.JIB) || hasTaxIdValue(row.PIB)) && (
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          {hasTaxIdValue(row.JIB) ? `JIB: ${row.JIB}` : ""}
-                          {hasTaxIdValue(row.JIB) && hasTaxIdValue(row.PIB)
-                            ? " | "
-                            : ""}
-                          {hasTaxIdValue(row.PIB) ? `PIB: ${row.PIB}` : ""}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {formatCurrency(Number(row.ukupno))}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {formatCurrency(Number(row.rabat_km))}
-                    </td>
-                    {isOption2(row) ? (
-                      <>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200">
-                          {formatCurrency(Number(row.Osnova_za_obracun_pdv))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700">
-                          {formatCurrency(Number(row.PDV))}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700 border-l border-gray-200">
-                          {formatCurrency(Number(row.Osnova_za_obracun_pdv))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-700">
-                          {formatCurrency(Number(row.PDV))}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400 border-l border-gray-200">
-                          {formatCurrency(0)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-400">
-                          {formatCurrency(0)}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ minWidth: GRID_MIN_WIDTH }}>
+              <div
+                className="grid bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500"
+                style={{ gridTemplateColumns: GRID_COLS }}
+              >
+                <div className="text-left px-4 py-3">Šifra KIF</div>
+                <div className="text-left px-4 py-3">Br fakture</div>
+                <div className="text-left px-4 py-3">Datum</div>
+                <div className="text-left px-4 py-3">Partner</div>
+                <div className="text-right px-4 py-3">Ukupno</div>
+                <div className="text-right px-4 py-3">Rabat</div>
+                <div className="text-right px-4 py-3 border-l border-gray-200">
+                  Osnova PDV (neobv.)
+                </div>
+                <div className="text-right px-4 py-3">PDV (neobv.)</div>
+                <div className="text-right px-4 py-3 border-l border-gray-200">
+                  Osnova PDV (obv.)
+                </div>
+                <div className="text-right px-4 py-3">PDV (obv.)</div>
+              </div>
+
+              <FixedSizeList
+                height={listHeight}
+                width="100%"
+                itemCount={filteredRows.length}
+                itemSize={ROW_HEIGHT}
+                itemData={filteredRows}
+                overscanCount={8}
+              >
+                {KifRowItem}
+              </FixedSizeList>
+            </div>
           </div>
         )}
       </div>

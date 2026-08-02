@@ -2,7 +2,16 @@ import * as PreglediService from "../services/pregledi.service.js";
 
 export const getPregledKIF = async (req, res) => {
   try {
-    const result = await PreglediService.getPregledKIF();
+    const { datumOd, datumDo } = req.query;
+
+    if (!datumOd || !datumDo) {
+      return res.status(400).json({
+        success: false,
+        message: "Parametri datumOd i datumDo su obavezni",
+      });
+    }
+
+    const result = await PreglediService.getPregledKIF(datumOd, datumDo);
 
     if (result.success) {
       return res.json({

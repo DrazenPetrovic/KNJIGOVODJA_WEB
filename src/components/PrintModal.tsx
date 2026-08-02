@@ -14,18 +14,18 @@ interface KifRow {
   sifra_partnera: number;
   naziv_partnera: string;
   adresa_partnera: string;
-  Naziv_grada: string;
-  Entitet: string;
-  JIB: string;
-  PIB: string;
+  naziv_grada: string;
+  entitet: string;
+  jib: string;
+  pib: string;
   ukupno: number;
   rabat_km: number;
-  Osnova_za_obracun_pdv: number;
-  PDV: number;
+  osnova_za_obracun_pdv: number;
+  pdv: number;
   vrednost: number;
   datum_unosa: string;
   vrsta_racuna_pod: string;
-  El_Kif_tip: string;
+  el_kif_tip: string;
 }
 
 interface PrintTotals {
@@ -70,8 +70,8 @@ const hasTaxId = (v: unknown) => {
   return s !== "" && !/^0+$/.test(s);
 };
 
-const isOption2 = (row: Pick<KifRow, "PIB" | "Entitet">) =>
-  hasTaxId(row.PIB) || String(row.Entitet ?? "").trim() === "-";
+const isOption2 = (row: Pick<KifRow, "pib" | "entitet">) =>
+  hasTaxId(row.pib) || String(row.entitet ?? "").trim() === "-";
 
 // ─── HTML izvještaja (ubacuje se u iframe) ────────────────────────────────────
 
@@ -89,15 +89,15 @@ function buildReportHTML(
           ? "#f0f8e8"
           : "#fff";
 
-      const o1Osnova = opt2 ? "" : fmt(Number(row.Osnova_za_obracun_pdv));
-      const o1Pdv = opt2 ? "" : fmt(Number(row.PDV));
-      const o2Osnova = opt2 ? fmt(Number(row.Osnova_za_obracun_pdv)) : "";
-      const o2Pdv = opt2 ? fmt(Number(row.PDV)) : "";
+      const o1Osnova = opt2 ? "" : fmt(Number(row.osnova_za_obracun_pdv));
+      const o1Pdv = opt2 ? "" : fmt(Number(row.pdv));
+      const o2Osnova = opt2 ? fmt(Number(row.osnova_za_obracun_pdv)) : "";
+      const o2Pdv = opt2 ? fmt(Number(row.pdv)) : "";
 
       const partner = [
         row.naziv_partnera,
-        [row.adresa_partnera, row.Naziv_grada].filter(Boolean).join(", "),
-        [hasTaxId(row.JIB) ? `JIB: ${row.JIB}` : "", hasTaxId(row.PIB) ? `PIB: ${row.PIB}` : ""]
+        [row.adresa_partnera, row.naziv_grada].filter(Boolean).join(", "),
+        [hasTaxId(row.jib) ? `JIB: ${row.jib}` : "", hasTaxId(row.pib) ? `PIB: ${row.pib}` : ""]
           .filter(Boolean)
           .join(" | "),
       ]
