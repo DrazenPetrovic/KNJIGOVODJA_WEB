@@ -134,31 +134,6 @@ export const getPregledKalkulacijaRobe = async (req, res) => {
   }
 };
 
-export const getPregledMjesecniPrihodi = async (req, res) => {
-  try {
-    const result = await PreglediService.getPregledMjesecniPrihodi();
-
-    if (result.success) {
-      return res.json({
-        success: true,
-        data: result.data,
-        count: result.count,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Greška pri preuzimanju mesečnih prihoda",
-    });
-  } catch (error) {
-    console.error("getPregledMjesecniPrihodi error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Greška pri obradi zahteva",
-    });
-  }
-};
-
 export const getPregledNivelacija = async (req, res) => {
   try {
     const result = await PreglediService.getPregledNivelacija();

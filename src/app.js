@@ -9,6 +9,7 @@ import healthRoutes from "./routes/health.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import preglediRoutes from "./routes/pregledi.routes.js";
 import printersRoutes from "./routes/printers.route.js";
+import mjesecniPrihodiRoutes from "./routes/mjesecniPrihodi.routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,7 @@ export const createApp = () => {
   app.use("/api", healthRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/pregledi", preglediRoutes);
+  app.use("/api/mjesecni-prihodi", mjesecniPrihodiRoutes);
 
   // Serviranje frontenda u produkciji
   if (env.NODE_ENV === "production") {

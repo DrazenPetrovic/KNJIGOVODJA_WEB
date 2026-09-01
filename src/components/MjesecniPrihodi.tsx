@@ -1,542 +1,619 @@
-import { useEffect, useMemo, useState } from "react";
-import { BarChart2, CalendarDays, Filter, Printer, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	Banknote,
+	CreditCard,
+	Info,
+	Landmark,
+	Loader2,
+	Printer,
+	Receipt,
+	RefreshCcw,
+	Tags,
+	TrendingUp,
+} from "lucide-react";
 import { PrintModalMjesecniPrihodi } from "./PrintModalMjesecniPrihodi";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
 const PRIMARY = "#785E9E";
 const ACCENT = "#8FC74A";
+const STOPA_PDV = 0.17;
 
-type PrihodiRow = Record<string, unknown>;
-type DateFilterMode = "day" | "period";
-type VrstaCode = 1 | 2 | 3;
-type RacunGroupCode = "Z" | "G" | "KO_Z" | "KO_G";
-
-interface SumBucket {
-	vpc: number;
-	rabat: number;
+// Red vraćen sa erp.mjesecni_prihodi_pregled(datumOd, datumDo).
+interface PrihodRed {
+	kategorija: string;
+	nacin_placanja: string;
+	storno: number;
 	ukupno: number;
 	pdv: number;
+	rabat: number;
+	veleprodajna_vrednost: number;
 }
 
-type GroupSummary = Record<RacunGroupCode, Record<VrstaCode, SumBucket>>;
+interface GrupaPlacanja {
+	naziv: string;
+	stavke: PrihodRed[];
+	ukupno: number;
+	storno: number;
+	pdv: number;
+	rabat: number;
+	veleprodajnaVrednost: number;
+}
 
-const RACUN_ORDER: RacunGroupCode[] = ["Z", "G", "KO_Z", "KO_G"];
-const VRSTA_ORDER: VrstaCode[] = [1, 2, 3];
+interface CelijaVrijednosti {
+	ukupno: number;
+	pdv: number;
+	rabat: number;
+	vpc: number;
+}
 
-const RACUN_LABELS: Record<RacunGroupCode, string> = {
-	Z: "Žiralni računi",
-	G: "Gotovinski računi",
-	KO_Z: "Storno žiralnog",
-	KO_G: "Storno gotovinskog",
-};
+interface IzvozInfo {
+	broj_racuna: number;
+	osnovica: number;
+	ukupno: number;
+}
 
-const VRSTA_LABELS: Record<VrstaCode, string> = {
-	1: "Proizvodi",
-	2: "Roba",
-	3: "Usluga",
-};
+const praznaCelija: CelijaVrijednosti = { ukupno: 0, pdv: 0, rabat: 0, vpc: 0 };
 
-const asNumber = (value: unknown) => {
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	if (typeof value === "string") {
-		const raw = value.replace(/\s+/g, "").trim();
-		if (!raw) return 0;
-
-		let normalized = raw;
-		const hasComma = raw.includes(",");
-		const hasDot = raw.includes(".");
-
-		if (hasComma && hasDot) {
-			const lastComma = raw.lastIndexOf(",");
-			const lastDot = raw.lastIndexOf(".");
-
-			if (lastDot > lastComma) {
-				// Format like 91,626.00 -> commas are thousands separators.
-				normalized = raw.replace(/,/g, "");
-			} else {
-				// Format like 91.626,00 -> dots are thousands separators.
-				normalized = raw.replace(/\./g, "").replace(/,/g, ".");
-			}
-		} else if (hasComma) {
-			const commaAsGrouping = /^[-+]?\d{1,3}(,\d{3})+$/.test(raw);
-			normalized = commaAsGrouping ? raw.replace(/,/g, "") : raw.replace(/,/g, ".");
-		} else if (hasDot) {
-			const dotAsGrouping = /^[-+]?\d{1,3}(\.\d{3})+$/.test(raw);
-			normalized = dotAsGrouping ? raw.replace(/\./g, "") : raw;
-		}
-
-		const parsed = Number(normalized);
-		return Number.isFinite(parsed) ? parsed : 0;
-	}
-	return 0;
-};
-
-const getFirstValue = (row: PrihodiRow, keys: string[]) => {
-	for (const key of keys) {
-		if (key in row && row[key] !== null && row[key] !== undefined && row[key] !== "") {
-			return row[key];
-		}
-	}
-	return undefined;
-};
-
-const getRowDate = (row: PrihodiRow) => {
-	const value = getFirstValue(row, ["datum_racuna", "Datum_racuna", "datumRacuna"]);
-	return getDateOnly(value);
-};
-
-const normalizeRacunGroup = (value: unknown): RacunGroupCode | null => {
-	const text = String(value ?? "")
-		.toUpperCase()
-		.replace(/Ž/g, "Z")
-		.replace(/\s+/g, "")
-		.trim();
-
-	if (text === "Z") return "Z";
-	if (text === "G") return "G";
-	if (text === "KO-Z") return "KO_Z";
-	if (text === "KO-G") return "KO_G";
-	return null;
-};
-
-const normalizeVrsta = (value: unknown): VrstaCode | null => {
-	const code = Number(value);
-	if (code === 1 || code === 2 || code === 3) return code;
-	return null;
-};
-
-const createEmptyBucket = (): SumBucket => ({
-	vpc: 0,
-	rabat: 0,
-	ukupno: 0,
-	pdv: 0,
-});
-
-const createEmptySummary = (): GroupSummary => ({
-	Z: { 1: createEmptyBucket(), 2: createEmptyBucket(), 3: createEmptyBucket() },
-	G: { 1: createEmptyBucket(), 2: createEmptyBucket(), 3: createEmptyBucket() },
-	KO_Z: {
-		1: createEmptyBucket(),
-		2: createEmptyBucket(),
-		3: createEmptyBucket(),
-	},
-	KO_G: {
-		1: createEmptyBucket(),
-		2: createEmptyBucket(),
-		3: createEmptyBucket(),
-	},
-});
-
-const getDateOnly = (value: unknown) => {
-	if (value === null || value === undefined || value === "") return "";
-	const dateString = String(value);
-	const normalized = dateString.includes("T")
-		? dateString
-		: dateString.replace(" ", "T");
-	const parsed = new Date(normalized);
-	if (Number.isNaN(parsed.getTime())) return "";
-	const year = parsed.getFullYear();
-	const month = String(parsed.getMonth() + 1).padStart(2, "0");
-	const day = String(parsed.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
-};
-
-const formatValue = (value: unknown) => {
-	if (value === null || value === undefined || value === "") {
-		return "-";
-	}
-
-	if (typeof value === "number") {
-		return new Intl.NumberFormat("en-US", {
+const formatIznos = (v: number | null | undefined) =>
+	`${Number(v ?? 0)
+		.toLocaleString("en-US", {
 			minimumFractionDigits: 2,
-			maximumFractionDigits: 4,
-		}).format(value);
-	}
+			maximumFractionDigits: 2,
+		})
+		.replace(/,/g, " ")} KM`;
 
-	const text = String(value);
+const jeStorno = (v: number) => Number(v) === 1;
 
-	if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-		const parsed = new Date(text);
-		if (!Number.isNaN(parsed.getTime())) {
-			return parsed.toLocaleDateString("sr-Latn-RS");
-		}
-	}
+const jeProizvod = (kategorija: string) =>
+	kategorija.toLowerCase().includes("proizv");
+const jeRoba = (kategorija: string) => kategorija.toLowerCase().includes("rob");
 
-	return text;
+// Nalazi red za konkretnu kombinaciju kategorije i storno flaga unutar grupe
+// (svaka kombinacija je jedinstvena — erp.mjesecni_prihodi_pregled grupiše po njoj).
+const pronadjiCeliju = (
+	stavke: PrihodRed[],
+	test: (kategorija: string) => boolean,
+	storno: boolean,
+): CelijaVrijednosti => {
+	const red = stavke.find(
+		(r) => test(r.kategorija) && jeStorno(r.storno) === storno,
+	);
+	if (!red) return praznaCelija;
+	return {
+		ukupno: Number(red.ukupno || 0),
+		pdv: Number(red.pdv || 0),
+		rabat: Number(red.rabat || 0),
+		vpc: Number(red.veleprodajna_vrednost || 0),
+	};
 };
 
-const getTodayIsoDate = () => {
-	const now = new Date();
-	const year = now.getFullYear();
-	const month = String(now.getMonth() + 1).padStart(2, "0");
-	const day = String(now.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
+// Formatira lokalni datum kao yyyy-MM-dd (bez prolaska kroz UTC, jer
+// toISOString() pomjera datum unazad za korisnike u zonama ispred UTC-a).
+const formatDatumISO = (d: Date): string => {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
+
+const prviDanMjeseca = () => {
+	const d = new Date();
+	return formatDatumISO(new Date(d.getFullYear(), d.getMonth(), 1));
+};
+
+const danas = () => formatDatumISO(new Date());
+
+// dd.MM.yyyy — za prikaz u poljima Datum od / Datum do.
+const formatDatumDMY = (v: string | undefined | null): string | null => {
+	if (!v) return null;
+	const d = new Date(v);
+	if (isNaN(d.getTime())) return null;
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}.`;
+};
+
+// Vizuelni identitet grupe po nazivu načina plaćanja — vrijednosti dolaze iz
+// baze pa se prepoznaju po ključnoj riječi, ne po tačnom stringu.
+const izgledGrupe = (naziv: string) => {
+	const n = naziv.toLowerCase();
+	if (n.includes("gotov")) return { icon: <Banknote size={16} />, boja: PRIMARY };
+	if (n.includes("žiral") || n.includes("ziral") || n.includes("virman"))
+		return { icon: <Landmark size={16} />, boja: ACCENT };
+	return { icon: <CreditCard size={16} />, boja: "#6b7280" };
+};
+
+const prioritetGrupe = (naziv: string) => {
+	const n = naziv.toLowerCase();
+	if (n.includes("gotov")) return 0;
+	if (n.includes("žiral") || n.includes("ziral") || n.includes("virman"))
+		return 1;
+	return 2;
+};
+
+function StatTile({
+	icon,
+	vrijednost,
+	naziv,
+	boja,
+	podnaslov,
+	izracunato,
+}: {
+	icon: React.ReactNode;
+	vrijednost: string;
+	naziv: string;
+	boja: string;
+	// Dodatna linija ispod naziva (npr. "17% = X KM") — za polja koja su izvedena
+	// iz drugih vrijednosti u hederu, ne dolaze direktno iz baze.
+	podnaslov?: string;
+	// Vizuelno izdvaja polje isprekidanim okvirom u boji polja — označava da je
+	// vrijednost izračunata (npr. Osnovica = VP - Rabat), a ne sirov zbir kolone.
+	izracunato?: boolean;
+}) {
+	return (
+		<div
+			className={`flex items-center gap-3 bg-white rounded-2xl shadow-sm px-4 py-3 flex-1 min-w-[170px] ${
+				izracunato ? "border-2 border-dashed" : "border border-gray-100"
+			}`}
+			style={izracunato ? { borderColor: boja } : undefined}
+		>
+			<div
+				className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+				style={{ background: `${boja}1f` }}
+			>
+				<div style={{ color: boja }}>{icon}</div>
+			</div>
+			<div className="min-w-0">
+				<div className="text-lg font-bold leading-tight text-gray-800">
+					{vrijednost}
+				</div>
+				<div className="text-xs text-gray-400 truncate">{naziv}</div>
+				{podnaslov && (
+					<div
+						className="text-[10px] font-semibold truncate"
+						style={{ color: boja }}
+					>
+						{podnaslov}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+const podnaslovClass =
+	"text-right px-3 py-1.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400";
+const razdvajac = "border-r-2 border-gray-200";
+
+function PodnasloviCelije({ separator }: { separator?: boolean }) {
+	return (
+		<>
+			<th className={podnaslovClass}>Ukupno</th>
+			<th className={podnaslovClass}>VP</th>
+			<th className={podnaslovClass}>Rabat</th>
+			<th className={`${podnaslovClass} ${separator ? razdvajac : ""}`}>PDV</th>
+		</>
+	);
+}
+
+function CelijeRed({
+	v,
+	boja,
+	separator,
+}: {
+	v: CelijaVrijednosti;
+	boja: string;
+	separator?: boolean;
+}) {
+	return (
+		<>
+			<td className="px-3 py-2.5 text-right font-bold" style={{ color: boja }}>
+				{formatIznos(v.ukupno)}
+			</td>
+			<td className="px-3 py-2.5 text-right text-gray-600">
+				{formatIznos(v.vpc)}
+			</td>
+			<td className="px-3 py-2.5 text-right text-gray-600">
+				{formatIznos(v.rabat)}
+			</td>
+			<td
+				className={`px-3 py-2.5 text-right text-gray-600 ${separator ? razdvajac : ""}`}
+			>
+				{formatIznos(v.pdv)}
+			</td>
+		</>
+	);
+}
 
 export function MjesecniPrihodi() {
-	const initialDay = getTodayIsoDate();
 	const [printOpen, setPrintOpen] = useState(false);
-
-	const [rows, setRows] = useState<PrihodiRow[]>([]);
+	const [datumOd, setDatumOd] = useState(prviDanMjeseca());
+	const [datumDo, setDatumDo] = useState(danas());
+	const [redovi, setRedovi] = useState<PrihodRed[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [filterMode, setFilterMode] = useState<DateFilterMode>("day");
-	const [dayDate, setDayDate] = useState(initialDay);
-	const [periodFrom, setPeriodFrom] = useState("");
-	const [periodTo, setPeriodTo] = useState("");
-	const [searchTerm, setSearchTerm] = useState("");
-	const [appliedFilters, setAppliedFilters] = useState({
-		mode: "day" as DateFilterMode,
-		dayDate: initialDay,
-		periodFrom: "",
-		periodTo: "",
-		searchTerm: "",
-	});
+	const [greska, setGreska] = useState<string | null>(null);
+	// Izvozne fakture (0% PDV) — informativno, da operater vidi zašto Osnovica
+	// x 17% ne odgovara stvarnom PDV-u kad ima izvoza u periodu.
+	const [izvoz, setIzvoz] = useState<IzvozInfo | null>(null);
+	const datumOdRef = useRef<HTMLInputElement>(null);
+	const datumDoRef = useRef<HTMLInputElement>(null);
 
-	const fetchData = async () => {
-		try {
-			setLoading(true);
-			setError(null);
+	const otvoriPicker = (ref: React.RefObject<HTMLInputElement>) => {
+		const input = ref.current;
+		if (!input) return;
+		if (typeof input.showPicker === "function") {
+			input.showPicker();
+		} else {
+			input.focus();
+		}
+	};
 
-			const response = await fetch(`${API_URL}/api/pregledi/mjesecni-prihodi`, {
-				credentials: "include",
-			});
-			const payload = await response.json();
+	const ucitaj = () => {
+		if (!datumOd || !datumDo) return;
+		setLoading(true);
+		setGreska(null);
+		fetch(
+			`${API_URL}/api/mjesecni-prihodi?datumOd=${datumOd}&datumDo=${datumDo}`,
+			{ credentials: "include" },
+		)
+			.then((res) => {
+				if (!res.ok) throw new Error("Greška pri učitavanju mjesečnih prihoda");
+				return res.json();
+			})
+			.then((json) => setRedovi(json.data ?? []))
+			.catch((err) =>
+				setGreska(err instanceof Error ? err.message : "Nepoznata greška"),
+			)
+			.finally(() => setLoading(false));
 
-			if (!response.ok || !payload?.success) {
-				throw new Error(
-					payload?.message || "Greška pri učitavanju mjesečnih prihoda.",
-				);
+		// Best-effort — ako ovaj poziv ne uspije, rekapitulacija i dalje radi,
+		// samo se ne prikazuje informativni red o izvozu.
+		setIzvoz(null);
+		fetch(
+			`${API_URL}/api/mjesecni-prihodi/izvoz?datumOd=${datumOd}&datumDo=${datumDo}`,
+			{ credentials: "include" },
+		)
+			.then((res) => (res.ok ? res.json() : null))
+			.then((json) => {
+				if (json?.success) setIzvoz(json.data);
+			})
+			.catch(() => {});
+	};
+
+	useEffect(ucitaj, []);
+
+	// Neto vrijednosti za heder — erp.mjesecni_prihodi_pregled već vraća storno
+	// redove sa negativnim iznosima (ukupno/pdv/rabat/veleprodajna_vrednost), pa
+	// je običan zbir preko svih redova dovoljan da storno ispravno umanji promet.
+	const netZaKolonu = (kolona: keyof PrihodRed) =>
+		redovi.reduce((s, r) => s + Number(r[kolona] || 0), 0);
+	const ukupnoNeto = useMemo(() => netZaKolonu("ukupno"), [redovi]);
+	const vpNeto = useMemo(() => netZaKolonu("veleprodajna_vrednost"), [redovi]);
+	const rabatNeto = useMemo(() => netZaKolonu("rabat"), [redovi]);
+	const osnovicaNeto = useMemo(() => vpNeto - rabatNeto, [vpNeto, rabatNeto]);
+	const osnovicaPdv17 = useMemo(() => osnovicaNeto * STOPA_PDV, [osnovicaNeto]);
+	const pdvNeto = useMemo(() => netZaKolonu("pdv"), [redovi]);
+
+	const grupe = useMemo((): GrupaPlacanja[] => {
+		const map = new Map<string, GrupaPlacanja>();
+		for (const r of redovi) {
+			const kljuc = r.nacin_placanja || "Ostalo";
+			let g = map.get(kljuc);
+			if (!g) {
+				g = {
+					naziv: kljuc,
+					stavke: [],
+					ukupno: 0,
+					storno: 0,
+					pdv: 0,
+					rabat: 0,
+					veleprodajnaVrednost: 0,
+				};
+				map.set(kljuc, g);
 			}
-
-			setRows(Array.isArray(payload.data) ? payload.data : []);
-		} catch (err) {
-			const message =
-				err instanceof Error ? err.message : "Neočekivana greška.";
-			setError(message);
-			setRows([]);
-		} finally {
-			setLoading(false);
+			g.stavke.push(r);
+			g.pdv += Number(r.pdv || 0);
+			g.rabat += Number(r.rabat || 0);
+			g.veleprodajnaVrednost += Number(r.veleprodajna_vrednost || 0);
+			if (jeStorno(r.storno)) g.storno += Number(r.ukupno || 0);
+			else g.ukupno += Number(r.ukupno || 0);
 		}
-	};
+		return [...map.values()].sort(
+			(a, b) =>
+				prioritetGrupe(a.naziv) - prioritetGrupe(b.naziv) ||
+				a.naziv.localeCompare(b.naziv, "bs"),
+		);
+	}, [redovi]);
 
-	useEffect(() => {
-		fetchData();
-	}, []);
-
-	const applyFilters = () => {
-		setAppliedFilters({
-			mode: filterMode,
-			dayDate,
-			periodFrom,
-			periodTo,
-			searchTerm,
-		});
-	};
-
-	const periodLabel = useMemo(() => {
-		if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
-			return new Date(`${appliedFilters.dayDate}T00:00:00`).toLocaleDateString(
-				"sr-Latn-RS",
-			);
-		}
-
-		if (
-			appliedFilters.mode === "period" &&
-			appliedFilters.periodFrom &&
-			appliedFilters.periodTo
-		) {
-			const from = new Date(
-				`${appliedFilters.periodFrom}T00:00:00`,
-			).toLocaleDateString("sr-Latn-RS");
-			const to = new Date(
-				`${appliedFilters.periodTo}T00:00:00`,
-			).toLocaleDateString("sr-Latn-RS");
-			return `${from} – ${to}`;
-		}
-
-		return "Sve stavke";
-	}, [appliedFilters]);
-
-	const filteredRows = useMemo(() => {
-		let temp = [...rows];
-
-		if (appliedFilters.mode === "day" && appliedFilters.dayDate) {
-			temp = temp.filter((row) => getRowDate(row) === appliedFilters.dayDate);
-		}
-
-		if (
-			appliedFilters.mode === "period" &&
-			appliedFilters.periodFrom &&
-			appliedFilters.periodTo
-		) {
-			temp = temp.filter((row) => {
-				const date = getRowDate(row);
-				return (
-					Boolean(date) &&
-					date >= appliedFilters.periodFrom &&
-					date <= appliedFilters.periodTo
-				);
-			});
-		}
-
-		const term = appliedFilters.searchTerm.trim().toLowerCase();
-		if (!term) return temp;
-
-		return temp.filter((row) => {
-			const text = Object.values(row)
-				.map((value) => String(value ?? ""))
-				.join(" ")
-				.toLowerCase();
-			return text.includes(term);
-		});
-	}, [rows, appliedFilters]);
-
-	const isAggregateVisible =
-		(appliedFilters.mode === "day" && Boolean(appliedFilters.dayDate)) ||
-		(appliedFilters.mode === "period" &&
-			Boolean(appliedFilters.periodFrom) &&
-			Boolean(appliedFilters.periodTo));
-
-	const groupedSummary = useMemo(() => {
-		const summary = createEmptySummary();
-
-		filteredRows.forEach((row) => {
-			const racunGroup = normalizeRacunGroup(
-				getFirstValue(row, ["vrsta_racuna", "Vrsta_racuna", "vrstaRacuna"]),
-			);
-			const vrsta = normalizeVrsta(
-				getFirstValue(row, ["vrsta", "Vrsta", "tip_vrste"]),
-			);
-
-			if (!racunGroup || !vrsta) return;
-
-			const bucket = summary[racunGroup][vrsta];
-			bucket.vpc += asNumber(getFirstValue(row, ["vpc_vrednost"]));
-			bucket.rabat += asNumber(getFirstValue(row, ["rabat_km"]));
-			bucket.ukupno += asNumber(getFirstValue(row, ["prodajna_vrednost"]));
-			bucket.pdv += asNumber(getFirstValue(row, ["pdv"]));
-		});
-
-		return summary;
-	}, [filteredRows]);
-
-	const summaryTotals = useMemo(() => {
-		const totals: Record<VrstaCode, SumBucket> = {
-			1: createEmptyBucket(),
-			2: createEmptyBucket(),
-			3: createEmptyBucket(),
-		};
-
-		RACUN_ORDER.forEach((racun) => {
-			VRSTA_ORDER.forEach((vrsta) => {
-				totals[vrsta].vpc += groupedSummary[racun][vrsta].vpc;
-				totals[vrsta].rabat += groupedSummary[racun][vrsta].rabat;
-				totals[vrsta].ukupno += groupedSummary[racun][vrsta].ukupno;
-				totals[vrsta].pdv += groupedSummary[racun][vrsta].pdv;
-			});
-		});
-
-		return totals;
-	}, [groupedSummary]);
+	const periodLabel = `${formatDatumDMY(datumOd) ?? ""} – ${formatDatumDMY(datumDo) ?? ""}`;
 
 	return (
-		<div className="space-y-5">
-			<div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-				<div className="flex flex-wrap items-end justify-between gap-2">
-					<div className="min-w-[220px] flex items-center gap-2">
-						<span
-							className="w-8 h-8 rounded-lg flex items-center justify-center"
-							style={{ background: "#ede8f5" }}
-						>
-							<BarChart2 size={16} style={{ color: PRIMARY }} />
-						</span>
-						<h2 className="text-base sm:text-lg font-bold text-gray-800">
-							Mjesečni prihodi
-						</h2>
-					</div>
-
-					<button
-						onClick={() => setPrintOpen(true)}
-						title="Štampaj"
-						className="ml-2 flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#785E9E] hover:text-[#785E9E] transition-colors"
-					>
-						<Printer size={14} />
-						Štampaj
-					</button>
-
-					<div className="flex flex-wrap items-end justify-end gap-2">
-						<div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-							<button
-								onClick={() => setFilterMode("day")}
-								className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-								style={
-									filterMode === "day"
-										? { background: PRIMARY, color: "#fff" }
-										: { color: "#4b5563" }
-								}
-							>
-								Po danu
-							</button>
-							<button
-								onClick={() => setFilterMode("period")}
-								className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-								style={
-									filterMode === "period"
-										? { background: PRIMARY, color: "#fff" }
-										: { color: "#4b5563" }
-								}
-							>
-								Za period
-							</button>
-						</div>
-
-						<div className="min-w-[160px]">
-							{filterMode === "day" ? (
-								<div className="relative">
-									<CalendarDays
-										size={14}
-										className="absolute left-2.5 top-2.5 text-gray-400"
-									/>
-									<input
-										type="date"
-										value={dayDate}
-										onChange={(e) => setDayDate(e.target.value)}
-										className="w-full rounded-lg border border-gray-300 bg-white pl-8 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
-									/>
-								</div>
-							) : (
-								<div className="flex gap-2">
-									<input
-										type="date"
-										value={periodFrom}
-										onChange={(e) => setPeriodFrom(e.target.value)}
-										className="w-[130px] rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
-									/>
-									<input
-										type="date"
-										value={periodTo}
-										onChange={(e) => setPeriodTo(e.target.value)}
-										className="w-[130px] rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
-									/>
-								</div>
-							)}
-						</div>
-
-						<div className="relative min-w-[240px]">
-							<Search
-								size={14}
-								className="absolute left-2.5 top-2.5 text-gray-400"
-							/>
-							<input
-								type="text"
-								value={searchTerm}
-								onChange={(e) => setSearchTerm(e.target.value)}
-								placeholder="Pretraži podatke..."
-								className="w-full rounded-lg border border-gray-300 bg-white pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
-							/>
-						</div>
-
-						<button
-							onClick={applyFilters}
-							className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
-							style={{ background: PRIMARY, color: "#fff" }}
-							disabled={loading}
-						>
-							<Filter size={14} />
-							Primijeni filtere
-						</button>
-					</div>
+		<div className="space-y-4">
+			{/* Naslov */}
+			<div className="flex items-center gap-3">
+				<div
+					className="w-10 h-10 rounded-xl flex items-center justify-center"
+					style={{ background: "#ede8f5" }}
+				>
+					<TrendingUp size={20} style={{ color: PRIMARY }} />
 				</div>
+				<div className="flex-1">
+					<h2 className="text-xl font-bold text-gray-800">Mjesečni prihodi</h2>
+					<p className="text-xs text-gray-400">
+						Prihodi po načinu plaćanja i kategoriji za izabrani period
+					</p>
+				</div>
+				<button
+					type="button"
+					onClick={() => setPrintOpen(true)}
+					disabled={loading || redovi.length === 0}
+					className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-40"
+					style={{ background: PRIMARY }}
+				>
+					<Printer size={15} />
+					Štampaj
+				</button>
+			</div>
 
-				<div className="mt-3 rounded-xl border overflow-hidden" style={{ borderColor: "#e7dff1", background: "#fbfafe" }}>
-					<div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100">
-						<div className="flex items-center gap-2 px-3 py-1.5">
-							<span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold whitespace-nowrap">
-								Period
-							</span>
-							<span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-								{periodLabel}
-							</span>
+			{/* Filteri */}
+			<div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+				<div className="flex flex-wrap items-end gap-3">
+					<div>
+						<span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+							Datum od
+						</span>
+						<div
+							className="relative cursor-pointer"
+							onClick={() => otvoriPicker(datumOdRef)}
+						>
+							<input
+								ref={datumOdRef}
+								type="date"
+								value={datumOd}
+								onChange={(e) => setDatumOd(e.target.value)}
+								style={{ color: "transparent" }}
+								className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#785E9E] transition-colors bg-white cursor-pointer"
+							/>
+							<div className="absolute inset-0 flex items-center px-3 text-sm text-gray-800 pointer-events-none">
+								{formatDatumDMY(datumOd) ?? "Izaberite datum"}
+							</div>
 						</div>
-
-
-
 					</div>
+					<div>
+						<span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+							Datum do
+						</span>
+						<div
+							className="relative cursor-pointer"
+							onClick={() => otvoriPicker(datumDoRef)}
+						>
+							<input
+								ref={datumDoRef}
+								type="date"
+								value={datumDo}
+								onChange={(e) => setDatumDo(e.target.value)}
+								style={{ color: "transparent" }}
+								className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-[#785E9E] transition-colors bg-white cursor-pointer"
+							/>
+							<div className="absolute inset-0 flex items-center px-3 text-sm text-gray-800 pointer-events-none">
+								{formatDatumDMY(datumDo) ?? "Izaberite datum"}
+							</div>
+						</div>
+					</div>
+					<button
+						type="button"
+						onClick={ucitaj}
+						disabled={loading || !datumOd || !datumDo}
+						className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50"
+						style={{ background: PRIMARY }}
+					>
+						<RefreshCcw size={14} className={loading ? "animate-spin" : ""} />
+						Prikaži
+					</button>
 				</div>
 			</div>
 
-			{isAggregateVisible && (
-				<div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-
-					<div className="overflow-x-auto">
-						<table className="w-full min-w-[1500px]">
-							<thead>
-								<tr className="border-b text-xs uppercase tracking-wider" style={{ background: "#f4f1f9", borderColor: "#e7dff1", color: PRIMARY }}>
-									<th className="text-left px-4 py-3">Vrsta računa</th>
-									{VRSTA_ORDER.map((vrsta) => (
-										<th
-											key={`group-${vrsta}`}
-											className="text-center align-middle px-4 py-3"
-											colSpan={4}
-										>
-											{VRSTA_LABELS[vrsta]}
-										</th>
-									))}
-								</tr>
-								<tr className="border-b text-xs uppercase tracking-wider" style={{ background: "#f9f6fc", borderColor: "#e7dff1", color: "#67507f" }}>
-									<th className="text-left px-4 py-2"> </th>
-									{VRSTA_ORDER.flatMap((vrsta) => [
-										<th key={`${vrsta}-vpc`} className="text-right px-4 py-2">VPC</th>,
-										<th key={`${vrsta}-rabat`} className="text-right px-4 py-2">Rabat</th>,
-										<th key={`${vrsta}-ukupno`} className="text-right px-4 py-2">Ukupno</th>,
-										<th
-											key={`${vrsta}-pdv`}
-											className="text-right px-4 py-2 border-r-2"
-											style={{ borderColor: ACCENT }}
-										>
-											PDV
-										</th>,
-									])}
-								</tr>
-							</thead>
-							<tbody>
-								{RACUN_ORDER.map((racun) => (
-									<tr key={racun} className="border-b border-gray-100 even:bg-[#785E9E10]">
-										<td className="px-4 py-3 text-sm font-semibold text-gray-800 whitespace-nowrap">
-											{RACUN_LABELS[racun]}
-										</td>
-										{VRSTA_ORDER.flatMap((vrsta) => {
-											const bucket = groupedSummary[racun][vrsta];
-											return [
-												<td key={`${racun}-${vrsta}-vpc`} className="px-4 py-3 text-sm text-right text-gray-700">{formatValue(bucket.vpc)}</td>,
-												<td key={`${racun}-${vrsta}-rabat`} className="px-4 py-3 text-sm text-right text-gray-700">{formatValue(bucket.rabat)}</td>,
-												<td key={`${racun}-${vrsta}-ukupno`} className="px-4 py-3 text-sm text-right text-gray-700">{formatValue(bucket.ukupno)}</td>,
-												<td key={`${racun}-${vrsta}-pdv`} className="px-4 py-3 text-sm text-right text-gray-700 border-r-2" style={{ borderColor: "#cfe4b1" }}>{formatValue(bucket.pdv)}</td>,
-											];
-										})}
-									</tr>
-								))}
-								<tr style={{ background: "#f4f1f9" }}>
-									<td className="px-4 py-3 text-sm font-bold text-gray-800 whitespace-nowrap">
-										Ukupno
-									</td>
-									{VRSTA_ORDER.flatMap((vrsta) => [
-										<td key={`total-${vrsta}-vpc`} className="px-4 py-3 text-sm text-right font-bold text-gray-800">{formatValue(summaryTotals[vrsta].vpc)}</td>,
-										<td key={`total-${vrsta}-rabat`} className="px-4 py-3 text-sm text-right font-bold text-gray-800">{formatValue(summaryTotals[vrsta].rabat)}</td>,
-										<td key={`total-${vrsta}-ukupno`} className="px-4 py-3 text-sm text-right font-bold text-gray-800">{formatValue(summaryTotals[vrsta].ukupno)}</td>,
-										<td key={`total-${vrsta}-pdv`} className="px-4 py-3 text-sm text-right font-bold text-gray-800 border-r-2" style={{ borderColor: ACCENT }}>{formatValue(summaryTotals[vrsta].pdv)}</td>,
-									])}
-								</tr>
-							</tbody>
-						</table>
-					</div>
+			{/* Statistika */}
+			{!loading && !greska && (
+				<div className="flex flex-wrap gap-3">
+					<StatTile
+						icon={<TrendingUp size={16} />}
+						vrijednost={formatIznos(ukupnoNeto)}
+						naziv="Ukupno"
+						boja={ACCENT}
+					/>
+					<StatTile
+						icon={<Landmark size={16} />}
+						vrijednost={formatIznos(vpNeto)}
+						naziv="Veleprodajna vrednost"
+						boja={PRIMARY}
+					/>
+					<StatTile
+						icon={<CreditCard size={16} />}
+						vrijednost={formatIznos(rabatNeto)}
+						naziv="Rabat"
+						boja={PRIMARY}
+					/>
+					<StatTile
+						icon={<Receipt size={16} />}
+						vrijednost={formatIznos(osnovicaNeto)}
+						naziv="Osnovica"
+						podnaslov={`17% = ${formatIznos(osnovicaPdv17)}`}
+						boja={PRIMARY}
+						izracunato
+					/>
+					<StatTile
+						icon={<Tags size={16} />}
+						vrijednost={formatIznos(pdvNeto)}
+						naziv="PDV"
+						boja={PRIMARY}
+					/>
 				</div>
 			)}
 
-			{!loading && !error && filteredRows.length === 0 && (
-				<div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-					<div className="p-8 text-center text-gray-500">Nema podataka za izabrane filtere.</div>
+			{/* Napomena o izvoznim fakturama — one ulaze u Osnovicu ali imaju 0%
+			    PDV, pa "Osnovica x 17%" inače djeluje kao da PDV fali. */}
+			{!loading && !greska && izvoz && izvoz.broj_racuna > 0 && (
+				<div
+					className="flex items-start gap-2.5 rounded-2xl px-4 py-3 text-xs"
+					style={{ background: "#f59e0b1f", color: "#92620a" }}
+				>
+					<Info size={16} className="flex-shrink-0 mt-0.5" />
+					<span>
+						U periodu ima <strong>{izvoz.broj_racuna}</strong> izvozn
+						{izvoz.broj_racuna === 1 ? "a" : "ih"} računa (0% PDV) u iznosu od{" "}
+						<strong>{formatIznos(izvoz.osnovica)}</strong> — ušli su u
+						Veleprodajnu vrednost i Osnovicu, ali ne i u PDV, zato Osnovica ×
+						17% ne odgovara stvarnom PDV-u za ovaj period.
+					</span>
+				</div>
+			)}
+
+			{/* Grupe po načinu plaćanja */}
+			{loading && (
+				<div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center py-20 gap-3">
+					<Loader2 size={22} className="animate-spin" style={{ color: PRIMARY }} />
+					<span className="text-sm text-gray-500">Učitavanje...</span>
+				</div>
+			)}
+
+			{greska && (
+				<div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 py-20">
+					<p className="text-sm text-red-500">{greska}</p>
+					<button
+						type="button"
+						onClick={ucitaj}
+						className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+						style={{ background: `${PRIMARY}1f`, color: PRIMARY }}
+					>
+						Pokušaj ponovo
+					</button>
+				</div>
+			)}
+
+			{!loading && !greska && grupe.length === 0 && (
+				<div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-2 py-20 text-gray-300">
+					<TrendingUp size={28} />
+					<p className="text-sm text-gray-400">
+						Nema podataka za izabrani period.
+					</p>
+				</div>
+			)}
+
+			{!loading && !greska && grupe.length > 0 && (
+				<div className="space-y-4">
+					{grupe.map((g) => {
+						const { icon, boja } = izgledGrupe(g.naziv);
+						return (
+							<div
+								key={g.naziv}
+								className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+							>
+								{/* Header grupe */}
+								<div
+									className="flex items-center gap-3 px-4 py-3"
+									style={{ background: `${boja}14` }}
+								>
+									<div
+										className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+										style={{ background: `${boja}26` }}
+									>
+										<div style={{ color: boja }}>{icon}</div>
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="font-bold text-sm text-gray-800">
+											{g.naziv}
+										</div>
+										<div className="text-xs text-gray-400">
+											{g.stavke.length}{" "}
+											{g.stavke.length === 1 ? "stavka" : "stavki"}
+											{g.storno !== 0
+												? ` · stornirano ${formatIznos(Math.abs(g.storno))}`
+												: ""}
+										</div>
+									</div>
+									<div className="text-right flex-shrink-0">
+										<div className="text-lg font-bold" style={{ color: boja }}>
+											{formatIznos(g.ukupno)}
+										</div>
+										<div className="text-[10px] uppercase tracking-wide text-gray-400">
+											Ukupno
+										</div>
+									</div>
+								</div>
+
+								{/* Tabela grupe — Proizvod/Roba, prvo redovni podaci pa storno u nastavku reda */}
+								{(() => {
+									const proizvodNormal = pronadjiCeliju(
+										g.stavke,
+										jeProizvod,
+										false,
+									);
+									const robaNormal = pronadjiCeliju(g.stavke, jeRoba, false);
+									const proizvodStorno = pronadjiCeliju(
+										g.stavke,
+										jeProizvod,
+										true,
+									);
+									const robaStorno = pronadjiCeliju(g.stavke, jeRoba, true);
+									const STORNO_BOJA = "#f59e0b";
+									return (
+										<div className="overflow-x-auto">
+											<table className="w-full text-sm">
+												<thead>
+													<tr className="bg-[#faf9fc]">
+														<th
+															colSpan={4}
+															className={`text-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${razdvajac}`}
+															style={{ color: boja }}
+														>
+															Proizvod
+														</th>
+														<th
+															colSpan={4}
+															className={`text-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${razdvajac}`}
+															style={{ color: STORNO_BOJA }}
+														>
+															Proizvod — storno
+														</th>
+														<th
+															colSpan={4}
+															className={`text-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${razdvajac}`}
+															style={{ color: boja }}
+														>
+															Roba
+														</th>
+														<th
+															colSpan={4}
+															className="text-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide"
+															style={{ color: STORNO_BOJA }}
+														>
+															Roba — storno
+														</th>
+													</tr>
+													<tr className="border-t border-gray-100">
+														<PodnasloviCelije separator />
+														<PodnasloviCelije separator />
+														<PodnasloviCelije separator />
+														<PodnasloviCelije />
+													</tr>
+												</thead>
+												<tbody>
+													<tr className="border-t border-gray-50">
+														<CelijeRed v={proizvodNormal} boja={boja} separator />
+														<CelijeRed
+															v={proizvodStorno}
+															boja={STORNO_BOJA}
+															separator
+														/>
+														<CelijeRed v={robaNormal} boja={boja} separator />
+														<CelijeRed v={robaStorno} boja={STORNO_BOJA} />
+													</tr>
+												</tbody>
+											</table>
+										</div>
+									);
+								})()}
+							</div>
+						);
+					})}
 				</div>
 			)}
 
@@ -545,9 +622,14 @@ export function MjesecniPrihodi() {
 				onClose={() => setPrintOpen(false)}
 				title="Mjesečni prihodi"
 				periodLabel={periodLabel}
-				groupedSummary={groupedSummary}
-				summaryTotals={summaryTotals}
-				itemCount={filteredRows.length}
+				grupe={grupe}
+				ukupnoNeto={ukupnoNeto}
+				vpNeto={vpNeto}
+				rabatNeto={rabatNeto}
+				osnovicaNeto={osnovicaNeto}
+				osnovicaPdv17={osnovicaPdv17}
+				pdvNeto={pdvNeto}
+				izvoz={izvoz}
 			/>
 		</div>
 	);

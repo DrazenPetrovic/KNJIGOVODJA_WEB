@@ -4,89 +4,152 @@ import { ChevronDown, FileText, Loader2, Printer, X } from "lucide-react";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
 const PRIMARY = "#785E9E";
 
-type VrstaCode = 1 | 2 | 3;
-type RacunGroupCode = "Z" | "G" | "KO_Z" | "KO_G";
-
-interface SumBucket {
-	vpc: number;
-	rabat: number;
+interface PrihodRed {
+	kategorija: string;
+	nacin_placanja: string;
+	storno: number;
 	ukupno: number;
 	pdv: number;
+	rabat: number;
+	veleprodajna_vrednost: number;
 }
 
-type GroupSummary = Record<RacunGroupCode, Record<VrstaCode, SumBucket>>;
+interface GrupaPlacanja {
+	naziv: string;
+	stavke: PrihodRed[];
+	ukupno: number;
+	storno: number;
+	pdv: number;
+	rabat: number;
+	veleprodajnaVrednost: number;
+}
+
+interface IzvozInfo {
+	broj_racuna: number;
+	osnovica: number;
+	ukupno: number;
+}
+
+interface CelijaVrijednosti {
+	ukupno: number;
+	pdv: number;
+	rabat: number;
+	vpc: number;
+}
+
+const praznaCelija: CelijaVrijednosti = { ukupno: 0, pdv: 0, rabat: 0, vpc: 0 };
+
+const jeStorno = (v: number) => Number(v) === 1;
+const jeProizvod = (kategorija: string) =>
+	kategorija.toLowerCase().includes("proizv");
+const jeRoba = (kategorija: string) => kategorija.toLowerCase().includes("rob");
+
+const pronadjiCeliju = (
+	stavke: PrihodRed[],
+	test: (kategorija: string) => boolean,
+	storno: boolean,
+): CelijaVrijednosti => {
+	const red = stavke.find(
+		(r) => test(r.kategorija) && jeStorno(r.storno) === storno,
+	);
+	if (!red) return praznaCelija;
+	return {
+		ukupno: Number(red.ukupno || 0),
+		pdv: Number(red.pdv || 0),
+		rabat: Number(red.rabat || 0),
+		vpc: Number(red.veleprodajna_vrednost || 0),
+	};
+};
+
+const fmt = (v: number) =>
+	Number(v ?? 0).toLocaleString("en-US", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	});
 
 interface PrintModalMjesecniPrihodiProps {
 	open: boolean;
 	onClose: () => void;
 	title: string;
 	periodLabel: string;
-	groupedSummary: GroupSummary;
-	summaryTotals: Record<VrstaCode, SumBucket>;
-	itemCount: number;
+	grupe: GrupaPlacanja[];
+	ukupnoNeto: number;
+	vpNeto: number;
+	rabatNeto: number;
+	osnovicaNeto: number;
+	osnovicaPdv17: number;
+	pdvNeto: number;
+	izvoz: IzvozInfo | null;
 }
-
-const RACUN_ORDER: RacunGroupCode[] = ["Z", "G", "KO_Z", "KO_G"];
-const VRSTA_ORDER: VrstaCode[] = [1, 2, 3];
-
-const RACUN_LABELS: Record<RacunGroupCode, string> = {
-	Z: "Žiralni računi",
-	G: "Gotovinski računi",
-	KO_Z: "Storno žiralnog",
-	KO_G: "Storno gotovinskog",
-};
-
-const VRSTA_LABELS: Record<VrstaCode, string> = {
-	1: "Proizvodi",
-	2: "Roba",
-	3: "Usluga",
-};
-
-const fmt = (v: number) =>
-	new Intl.NumberFormat("en-US", {
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 4,
-	}).format(Number.isFinite(v) ? v : 0);
 
 function buildReportHTML(
 	title: string,
 	periodLabel: string,
-	itemCount: number,
-	groupedSummary: GroupSummary,
-	summaryTotals: Record<VrstaCode, SumBucket>,
+	grupe: GrupaPlacanja[],
+	ukupnoNeto: number,
+	vpNeto: number,
+	rabatNeto: number,
+	osnovicaNeto: number,
+	osnovicaPdv17: number,
+	pdvNeto: number,
+	izvoz: IzvozInfo | null,
 ): string {
-	const rowsHtml = RACUN_ORDER.map((racun, rowIndex) => {
-		const bg = rowIndex % 2 === 0 ? "#f7f3fc" : "#ffffff";
-		const cells = VRSTA_ORDER.flatMap((vrsta) => {
-			const b = groupedSummary[racun][vrsta];
-			return [
-				`<td class="num">${fmt(b.vpc)}</td>`,
-				`<td class="num">${fmt(b.rabat)}</td>`,
-				`<td class="num">${fmt(b.ukupno)}</td>`,
-				`<td class="num sep">${fmt(b.pdv)}</td>`,
-			].join("");
-		}).join("");
+	const rekapRows = [
+		{ label: "Ukupno:", vrijednost: ukupnoNeto },
+		{ label: "Veleprodajna vrijednost:", vrijednost: vpNeto },
+		{ label: "Rabat:", vrijednost: rabatNeto },
+		{
+			label: `Osnovica (17% = ${fmt(osnovicaPdv17)}):`,
+			vrijednost: osnovicaNeto,
+		},
+		{ label: "PDV:", vrijednost: pdvNeto },
+	]
+		.map(
+			(r) =>
+				`<tr><td class="rekap-label">${r.label}</td><td class="rekap-vrijednost">${fmt(r.vrijednost)}</td></tr>`,
+		)
+		.join("");
 
-		return `<tr style="background:${bg}"><td class="left">${RACUN_LABELS[racun]}</td>${cells}</tr>`;
-	}).join("");
+	const izvozHtml =
+		izvoz && izvoz.broj_racuna > 0
+			? `<div class="izvoz-napomena">Napomena: u periodu ima ${izvoz.broj_racuna} izvozn${izvoz.broj_racuna === 1 ? "a" : "ih"} računa (0% PDV) u iznosu od ${fmt(izvoz.osnovica)} — ušli su u Veleprodajnu vrijednost i Osnovicu, ali ne i u PDV, zato Osnovica × 17% ne odgovara stvarnom PDV-u za ovaj period.</div>`
+			: "";
 
-	const totalCells = VRSTA_ORDER.flatMap((vrsta) => {
-		const b = summaryTotals[vrsta];
-		return [
-			`<td class="num"><strong>${fmt(b.vpc)}</strong></td>`,
-			`<td class="num"><strong>${fmt(b.rabat)}</strong></td>`,
-			`<td class="num"><strong>${fmt(b.ukupno)}</strong></td>`,
-			`<td class="num sep"><strong>${fmt(b.pdv)}</strong></td>`,
-		].join("");
-	}).join("");
+	const grupeHtml = grupe
+		.map((g) => {
+			const proizvodNormal = pronadjiCeliju(g.stavke, jeProizvod, false);
+			const robaNormal = pronadjiCeliju(g.stavke, jeRoba, false);
+			const proizvodStorno = pronadjiCeliju(g.stavke, jeProizvod, true);
+			const robaStorno = pronadjiCeliju(g.stavke, jeRoba, true);
 
-	const groupHeader = VRSTA_ORDER.map(
-		(v) => `<th class="group" colspan="4">${VRSTA_LABELS[v]}</th>`,
-	).join("");
+			const celije = (v: CelijaVrijednosti, storno?: boolean) =>
+				`<td class="num${storno ? " storno" : ""}">${fmt(v.ukupno)}</td><td class="num${storno ? " storno" : ""}">${fmt(v.vpc)}</td><td class="num${storno ? " storno" : ""}">${fmt(v.rabat)}</td><td class="num${storno ? " storno" : ""}">${fmt(v.pdv)}</td>`;
 
-	const subHeader = VRSTA_ORDER.map(
-		() => `<th class="num">VPC</th><th class="num">Rabat</th><th class="num">Ukupno</th><th class="num sep">PDV</th>`,
-	).join("");
+			return `<div class="grupa">
+  <div class="grupa-naslov">${g.naziv}</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="col-label"></th>
+        <th class="num">Ukupno</th><th class="num">VP</th><th class="num">Rabat</th><th class="num">PDV</th>
+        <th class="col-label"></th>
+        <th class="num">Ukupno</th><th class="num">VP</th><th class="num">Rabat</th><th class="num">PDV</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="left"><strong>Proizvod</strong></td>${celije(proizvodNormal)}
+        <td class="left"><strong>Roba</strong></td>${celije(robaNormal)}
+      </tr>
+      <tr>
+        <td class="left storno"><strong>Proizvod — storno</strong></td>${celije(proizvodStorno, true)}
+        <td class="left storno"><strong>Roba — storno</strong></td>${celije(robaStorno, true)}
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+		})
+		.join("");
 
 	return `<!DOCTYPE html>
 <html lang="sr">
@@ -100,21 +163,30 @@ function buildReportHTML(
   .header h1 { font-size: 14pt; font-weight: 700; color: ${PRIMARY}; }
   .header .period { font-size: 9pt; color: #555; margin-top: 2px; }
   .header .logo { font-size: 10pt; font-weight: 600; color: #333; text-align: right; }
+
+  .rekap-wrap { display: flex; justify-content: center; margin-bottom: 8mm; }
+  .rekap { width: 140mm; }
+  .rekap-naslov { text-align: center; font-size: 11pt; font-weight: 700; letter-spacing: .05em; margin-bottom: 6px; }
+  .rekap table { width: 100%; border-collapse: collapse; }
+  .rekap-label { border: 1px solid #999; padding: 4px 10px; font-size: 9.5pt; font-weight: 700; text-align: left; background: #fff; }
+  .rekap-vrijednost { border: 1px solid #999; padding: 4px 10px; font-size: 9.5pt; font-weight: 700; text-align: center; background: #e5e0ee; }
+  .izvoz-napomena { margin-top: 8px; border: 1px solid ${PRIMARY}; padding: 5px 8px; font-size: 8pt; color: #333; line-height: 1.4; }
+
+  .grupa { margin-bottom: 6mm; page-break-inside: avoid; }
+  .grupa-naslov { font-size: 10.5pt; font-weight: 700; text-transform: uppercase; border-bottom: 1.5px solid ${PRIMARY}; padding-bottom: 3px; margin-bottom: 4px; }
   table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-  thead tr.top { background: #f4f1f9; }
-  thead tr.sub { background: #f9f6fc; }
-  th { padding: 5px 6px; text-align: left; border-bottom: 1.5px solid #d8cde8; color: #5c4676; text-transform: uppercase; font-size: 7.5pt; letter-spacing: .04em; }
-  th.group { text-align: center; color: ${PRIMARY}; }
+  th { padding: 5px 6px; text-align: right; border-bottom: 1.5px solid #d8cde8; background: #f4f1f9; color: #5c4676; text-transform: uppercase; font-size: 7.5pt; letter-spacing: .04em; }
+  th.col-label { width: 8%; }
   td { padding: 4px 6px; border-bottom: 1px solid #ddd; }
-  td.left { font-weight: 600; }
+  td.left { text-align: left; }
+  td.left.storno { color: #92620a; }
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .sep { border-right: 2px solid #8FC74A; }
-  tfoot td { background: #f4f1f9; border-top: 1.5px solid #d8cde8; }
+  td.num.storno { color: #92620a; }
+
   .footer { margin-top: 8mm; font-size: 8pt; color: #888; text-align: right; }
   @media print {
     body { padding: 8mm; }
     thead { display: table-header-group; }
-    tfoot { display: table-footer-group; }
     tr { page-break-inside: avoid; }
   }
 </style>
@@ -123,32 +195,20 @@ function buildReportHTML(
   <div class="header">
     <div>
       <h1>${title}</h1>
-      <div class="period">Period: ${periodLabel || "–"} &nbsp;|&nbsp; Broj stavki: ${itemCount}</div>
+      <div class="period">Period: ${periodLabel || "–"}</div>
     </div>
     <div class="logo">Izvjestaj<br/><span style="font-weight:400;font-size:8pt;color:#999">${new Date().toLocaleDateString("sr-Latn-RS")}</span></div>
   </div>
 
-  <table>
-    <thead>
-      <tr class="top">
-        <th>Vrsta računa</th>
-        ${groupHeader}
-      </tr>
-      <tr class="sub">
-        <th></th>
-        ${subHeader}
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td><strong>Ukupno</strong></td>
-        ${totalCells}
-      </tr>
-    </tfoot>
-  </table>
+  <div class="rekap-wrap">
+    <div class="rekap">
+      <div class="rekap-naslov">REKAPITULACIJA</div>
+      <table>${rekapRows}</table>
+      ${izvozHtml}
+    </div>
+  </div>
+
+  ${grupeHtml || `<div style="text-align:center;color:#aaa;padding:30px;font-size:11pt;">Nema podataka za izabrani period.</div>`}
 
   <div class="footer">Generisano: ${new Date().toLocaleString("sr-Latn-RS")}</div>
 </body>
@@ -160,9 +220,14 @@ export function PrintModalMjesecniPrihodi({
 	onClose,
 	title,
 	periodLabel,
-	groupedSummary,
-	summaryTotals,
-	itemCount,
+	grupe,
+	ukupnoNeto,
+	vpNeto,
+	rabatNeto,
+	osnovicaNeto,
+	osnovicaPdv17,
+	pdvNeto,
+	izvoz,
 }: PrintModalMjesecniPrihodiProps) {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [printers, setPrinters] = useState<string[]>([]);
@@ -212,14 +277,31 @@ export function PrintModalMjesecniPrihodi({
 		const html = buildReportHTML(
 			title,
 			periodLabel,
-			itemCount,
-			groupedSummary,
-			summaryTotals,
+			grupe,
+			ukupnoNeto,
+			vpNeto,
+			rabatNeto,
+			osnovicaNeto,
+			osnovicaPdv17,
+			pdvNeto,
+			izvoz,
 		);
 		doc.open();
 		doc.write(html);
 		doc.close();
-	}, [open, title, periodLabel, itemCount, groupedSummary, summaryTotals]);
+	}, [
+		open,
+		title,
+		periodLabel,
+		grupe,
+		ukupnoNeto,
+		vpNeto,
+		rabatNeto,
+		osnovicaNeto,
+		osnovicaPdv17,
+		pdvNeto,
+		izvoz,
+	]);
 
 	const handlePrint = () => {
 		const iframe = iframeRef.current;
@@ -242,6 +324,8 @@ export function PrintModalMjesecniPrihodi({
 	};
 
 	if (!open) return null;
+
+	const itemCount = grupe.reduce((s, g) => s + g.stavke.length, 0);
 
 	return (
 		<div
