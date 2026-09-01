@@ -51,7 +51,7 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
           <div className="flex justify-center mb-8">
             <div className="w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
               <img
-                src="/foto/IKONA.png"
+                src={`${import.meta.env.BASE_URL}foto/IKONA.png`}
                 alt="Karpas Ambalaže"
                 className="w-full h-full object-contain"
                 onError={(e) => {
