@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { X, Printer, ChevronDown, FileText, Loader2 } from "lucide-react";
 
 const PRIMARY = "#785E9E";
-const SECONDARY = "#8FC74A";
 
 // ─── Tipovi ───────────────────────────────────────────────────────────────────
 
@@ -80,6 +79,17 @@ function buildReportHTML(
   totals: PrintTotals,
   periodLabel: string,
 ): string {
+  // RS pdv unutar PDV neobveznika — isti obrazac kao rsPdv u KANCELARIJA_WEB
+  // KifPregledTemplate: neobveznik čiji je entitet RS.
+  const rsPdv = rows.reduce((s, row) => {
+    if (isOption2(row)) return s;
+    return row.entitet === "RS" ? s + (Number(row.pdv) || 0) : s;
+  }, 0);
+  const fbihPdv = rows.reduce((s, row) => {
+    if (isOption2(row)) return s;
+    return row.entitet === "FBiH" ? s + (Number(row.pdv) || 0) : s;
+  }, 0);
+
   const rowsHtml = rows
     .map((row) => {
       const opt2 = isOption2(row);
@@ -89,15 +99,13 @@ function buildReportHTML(
           ? "#f0f8e8"
           : "#fff";
 
-      const o1Osnova = opt2 ? "" : fmt(Number(row.osnova_za_obracun_pdv));
-      const o1Pdv = opt2 ? "" : fmt(Number(row.pdv));
-      const o2Osnova = opt2 ? fmt(Number(row.osnova_za_obracun_pdv)) : "";
-      const o2Pdv = opt2 ? fmt(Number(row.pdv)) : "";
-
       const partner = [
-        row.naziv_partnera,
+        `${row.sifra_partnera ?? ""} — ${row.naziv_partnera || "-"}`,
         [row.adresa_partnera, row.naziv_grada].filter(Boolean).join(", "),
-        [hasTaxId(row.jib) ? `JIB: ${row.jib}` : "", hasTaxId(row.pib) ? `PIB: ${row.pib}` : ""]
+        [
+          hasTaxId(row.jib) ? `JIB: ${row.jib}` : "",
+          hasTaxId(row.pib) ? `PIB: ${row.pib}` : "",
+        ]
           .filter(Boolean)
           .join(" | "),
       ]
@@ -106,15 +114,15 @@ function buildReportHTML(
 
       return `<tr style="background:${bg}">
         <td>${row.sifra_kif}</td>
-        <td>${[row.vrsta_racuna, row.broj_racuna].filter(Boolean).join(" - ") || "-"}</td>
-        <td>${displayDate(row.datum_racuna)}</td>
+        <td>${[row.vrsta_racuna, row.broj_racuna].filter(Boolean).join(" - ") || "-"}<div class="sub">${displayDate(row.datum_racuna)}</div></td>
         <td>${partner}</td>
         <td class="num">${fmt(Number(row.ukupno))}</td>
-        <td class="num">${fmt(Number(row.rabat_km))}</td>
-        <td class="num bl">${o1Osnova}</td>
-        <td class="num">${o1Pdv}</td>
-        <td class="num bl">${o2Osnova}</td>
-        <td class="num">${o2Pdv}</td>
+        <td class="num bl">${opt2 ? fmt(Number(row.osnova_za_obracun_pdv)) : "0.00"}</td>
+        <td class="num br">${opt2 ? fmt(Number(row.pdv)) : "0.00"}</td>
+        <td class="num bl">${!opt2 ? fmt(Number(row.osnova_za_obracun_pdv)) : "0.00"}</td>
+        <td class="num">${!opt2 ? fmt(Number(row.pdv)) : "0.00"}</td>
+        <td class="num">${!opt2 && row.entitet === "RS" ? fmt(Number(row.pdv)) : "0.00"}</td>
+        <td class="num br">${!opt2 && row.entitet === "FBiH" ? fmt(Number(row.pdv)) : "0.00"}</td>
       </tr>`;
     })
     .join("");
@@ -128,37 +136,43 @@ function buildReportHTML(
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 9pt; color: #1a1a1a; padding: 12mm; }
 
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8mm; }
-  .header h1 { font-size: 14pt; font-weight: 700; color: ${PRIMARY}; }
-  .header .period { font-size: 9pt; color: #555; margin-top: 2px; }
-  .header .logo { font-size: 10pt; font-weight: 600; color: #333; text-align: right; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start;
+            border-bottom: 3px solid ${PRIMARY}; padding-bottom: 8px; margin-bottom: 10px; }
+  .header h1 { font-size: 13pt; font-weight: 700; color: ${PRIMARY}; text-transform: uppercase; }
+  .header .period { font-size: 9pt; color: #444; margin-top: 2px; }
+  .header .meta { font-size: 8pt; color: #999; margin-top: 4px; text-align: right; }
 
-  .summary { display: flex; gap: 6mm; margin-bottom: 6mm; flex-wrap: wrap; }
-  .summary-box { border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; min-width: 120px; }
-  .summary-box .label { font-size: 7pt; text-transform: uppercase; color: #888; letter-spacing: .04em; }
-  .summary-box .value { font-size: 9pt; font-weight: 700; color: #1a1a1a; }
-  .summary-box.opt2 { border-color: ${SECONDARY}; background: ${SECONDARY}18; }
-  .summary-box.opt1 { border-color: ${PRIMARY}; background: ${PRIMARY}10; }
+  .rekap-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+  .rekap { width: 140mm; }
+  .rekap-naslov { text-align: center; font-size: 12pt; font-weight: 700; letter-spacing: .06em; margin-bottom: 6px; }
+  .rekap table { width: 100%; border-collapse: collapse; }
+  .rekap td.label { border: 1px solid #999; padding: 4px 10px; font-size: 10pt; font-weight: 700; background: #fff; }
+  .rekap td.value { border: 1px solid #999; padding: 4px 10px; font-size: 10pt; font-weight: 700; text-align: center; background: #d9d9d9; }
+  .rekap-group-title { text-align: center; font-size: 10pt; font-weight: 700; margin-top: 8px; margin-bottom: 3px; }
+  .rekap-row { display: flex; justify-content: space-between; font-size: 10pt; color: #333; padding: 2px 0; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-  thead tr { background: #f5f5f5; }
-  th { padding: 4px 5px; text-align: left; font-size: 7.5pt; text-transform: uppercase;
-       letter-spacing: .04em; color: #555; border-bottom: 1.5px solid #ccc; white-space: nowrap; }
-  td { padding: 3px 5px; border-bottom: 1px solid #eee; vertical-align: top; }
-  tr:hover { filter: brightness(0.97); }
+  table.main { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  thead tr { background: ${PRIMARY}; }
+  th { padding: 4px 5px; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #fff;
+       letter-spacing: .03em; white-space: nowrap; }
+  th.num { text-align: right; }
+  th.center { text-align: center; }
+  td { padding: 3px 5px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .sub { font-size: 7pt; color: #888; margin-top: 1px; }
 
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .bl { border-left: 1px solid #ccc; }
+  .bl { border-left: 1.5px solid #000; }
+  .br { border-right: 1.5px solid #000; }
+  thead .bl { border-left: 1.5px solid #fff; }
+  thead .br { border-right: 1.5px solid #fff; }
 
-  tfoot td { font-weight: 700; border-top: 1.5px solid #aaa; background: #f9f9f9; padding: 4px 5px; }
-
-  .footer { margin-top: 8mm; font-size: 8pt; color: #888; text-align: right; }
+  .footer { margin-top: 8mm; font-size: 8pt; color: #aaa; display: flex; justify-content: space-between;
+            border-top: 1px solid #e5e7eb; padding-top: 6px; }
 
   @media print {
     body { padding: 8mm; }
     .no-print { display: none; }
     thead { display: table-header-group; }
-    tfoot { display: table-footer-group; }
     tr { page-break-inside: avoid; }
   }
 </style>
@@ -166,83 +180,65 @@ function buildReportHTML(
 <body>
   <div class="header">
     <div>
-      <h1>Knjiga izlaznih faktura (KIF)</h1>
-      <div class="period">Period: ${periodLabel || "–"} &nbsp;|&nbsp; Ukupno faktura: ${rows.length}</div>
+      <h1>Knjiga izlaznih faktura</h1>
+      <div class="period">za period: ${periodLabel || "–"}</div>
     </div>
-    <div class="logo">Izvještaj<br/><span style="font-weight:400;font-size:8pt;color:#999">${new Date().toLocaleDateString("sr-Latn-RS")}</span></div>
-  </div>
-
-  <div class="summary">
-    <div class="summary-box opt2">
-      <div class="label">Opcija 2 — br. faktura</div>
-      <div class="value">${totals.option2.count}</div>
-    </div>
-    <div class="summary-box opt2">
-      <div class="label">Opcija 2 — osnova PDV</div>
-      <div class="value">${fmt(totals.option2.osnova)} KM</div>
-    </div>
-    <div class="summary-box opt2">
-      <div class="label">Opcija 2 — PDV</div>
-      <div class="value">${fmt(totals.option2.pdv)} KM</div>
-    </div>
-    <div class="summary-box opt1">
-      <div class="label">Opcija 1 — br. faktura</div>
-      <div class="value">${totals.option1.count}</div>
-    </div>
-    <div class="summary-box opt1">
-      <div class="label">Opcija 1 — osnova PDV</div>
-      <div class="value">${fmt(totals.option1.osnova)} KM</div>
-    </div>
-    <div class="summary-box opt1">
-      <div class="label">Opcija 1 — PDV</div>
-      <div class="value">${fmt(totals.option1.pdv)} KM</div>
-    </div>
-    <div class="summary-box">
-      <div class="label">Ukupno</div>
-      <div class="value">${fmt(totals.ukupno)} KM</div>
-    </div>
-    <div class="summary-box">
-      <div class="label">Rabat</div>
-      <div class="value">${fmt(totals.rabat)} KM</div>
+    <div class="meta">
+      Datum štampe: ${new Date().toLocaleDateString("sr-Latn-RS")}<br/>
+      Broj zapisa: ${rows.length}
     </div>
   </div>
 
-  <table>
+  <div class="rekap-wrap">
+    <div class="rekap">
+      <div class="rekap-naslov">REKAPITULACIJA</div>
+      <table>
+        <tr><td class="label">Ukupno fakturisano:</td><td class="value">${fmt(totals.ukupno)}</td></tr>
+        <tr><td class="label">Osnovica (obveznici + neobveznici):</td><td class="value">${fmt(totals.option1.osnova + totals.option2.osnova)}</td></tr>
+        <tr><td class="label">PDV (obveznici + neobveznici):</td><td class="value">${fmt(totals.option1.pdv + totals.option2.pdv)}</td></tr>
+        <tr><td class="label">Rabat:</td><td class="value">${fmt(totals.rabat)}</td></tr>
+      </table>
+
+      <div class="rekap-group-title">PDV OBVEZNICI</div>
+      <div class="rekap-row"><span>Osnovica:</span><span>${fmt(totals.option2.osnova)}</span></div>
+      <div class="rekap-row"><span>PDV:</span><span>${fmt(totals.option2.pdv)}</span></div>
+
+      <div class="rekap-group-title">PDV NEOBVEZNICI</div>
+      <div class="rekap-row"><span>Osnovica:</span><span>${fmt(totals.option1.osnova)}</span></div>
+      <div class="rekap-row"><span>PDV:</span><span>${fmt(totals.option1.pdv)}</span></div>
+      <div class="rekap-row"><span>RS:</span><span>${fmt(rsPdv)}</span></div>
+      <div class="rekap-row"><span>FBiH:</span><span>${fmt(fbihPdv)}</span></div>
+    </div>
+  </div>
+
+  <table class="main">
     <thead>
       <tr>
-        <th rowspan="2">Šifra KIF</th>
-        <th rowspan="2">Br. fakture</th>
-        <th rowspan="2">Datum</th>
+        <th rowspan="2">RB</th>
+        <th rowspan="2">Faktura</th>
         <th rowspan="2">Partner</th>
         <th rowspan="2" class="num">Ukupno</th>
-        <th rowspan="2" class="num">Rabat</th>
-        <th colspan="2" class="bl" style="text-align:center">Opcija 1</th>
-        <th colspan="2" class="bl" style="text-align:center">Opcija 2</th>
+        <th colspan="2" class="center bl br">PDV obveznici</th>
+        <th colspan="4" class="center bl br">PDV neobveznici</th>
       </tr>
       <tr>
-        <th class="num bl">Osnova PDV</th>
+        <th class="num bl">Osnova</th>
+        <th class="num br">PDV</th>
+        <th class="num bl">Osnova</th>
         <th class="num">PDV</th>
-        <th class="num bl">Osnova PDV</th>
-        <th class="num">PDV</th>
+        <th class="center">RS</th>
+        <th class="center br">FBiH</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml}
+      ${rowsHtml || `<tr><td colspan="10" style="text-align:center;color:#aaa;padding:30px;">Nema podataka za izabrani period.</td></tr>`}
     </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="4">UKUPNO — ${rows.length} faktura</td>
-        <td class="num">${fmt(totals.ukupno)}</td>
-        <td class="num">${fmt(totals.rabat)}</td>
-        <td class="num bl">${fmt(totals.option1.osnova)}</td>
-        <td class="num">${fmt(totals.option1.pdv)}</td>
-        <td class="num bl">${fmt(totals.option2.osnova)}</td>
-        <td class="num">${fmt(totals.option2.pdv)}</td>
-      </tr>
-    </tfoot>
   </table>
 
-  <div class="footer">Generisano: ${new Date().toLocaleString("sr-Latn-RS")}</div>
+  <div class="footer">
+    <span>KIF — knjiga izlaznih faktura</span>
+    <span>Generisano: ${new Date().toLocaleString("sr-Latn-RS")}</span>
+  </div>
 </body>
 </html>`;
 }

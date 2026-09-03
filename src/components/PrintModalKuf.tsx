@@ -3,25 +3,26 @@ import { X, Printer, ChevronDown, FileText, Loader2 } from "lucide-react";
 
 const PRIMARY = "#785E9E";
 
+// Red vraćen sa erp.kuf_pregled().
 interface KufRow {
-  redni_broj: number;
-  broj_racuna: string;
+  sifra: number;
+  broj_dokumenta: string;
   datum_dokumenta: string;
+  datum_ulaza_dokumenta: string;
   naziv_partnera: string;
   adresa_partnera: string;
-  pib: string;
-  opis_dokumenta: string;
-  ukupno_bez_pdv: number;
+  PIB: string;
+  opis: string;
+  vrednost_bez_pdv: number;
   iskazani_pdv: number;
   ulazni_pdv: number;
-  ulazni_pdv_uvozni: number;
-  sifra_drzave: number;
-  vreme_unosa: string;
-  naziv_grada: string;
-  naziv_drzave: string;
-  entitet: string;
-  jib: string;
-  tip_dokumenta_el_kuf: string;
+  ulazni_pdv_uvoz: number;
+  sif_drzave: number;
+  grad_partnera: string;
+  drzava_partnera: string;
+  entitet_partnera: string;
+  JIB: string;
+  tip_dokumenta: string;
 }
 
 interface KufTotals {
@@ -73,18 +74,20 @@ function buildReportHTML(
   totals: KufTotals,
   periodLabel: string,
 ): string {
+  const ukupno = totals.ukupnoBezPdv + totals.iskazaniPdv;
+
   const rowsHtml = rows
     .map((row, index) => {
       const bg = index % 2 === 0 ? "#f7f3fc" : "#ffffff";
       const partner = [
         row.naziv_partnera,
-        [row.adresa_partnera, row.naziv_grada, row.entitet]
+        [row.adresa_partnera, row.grad_partnera, row.entitet_partnera]
           .filter(Boolean)
           .join(", "),
-        row.naziv_drzave,
+        row.drzava_partnera,
         [
-          hasTaxId(row.jib) ? `JIB: ${row.jib}` : "",
-          hasTaxId(row.pib) ? `PIB: ${row.pib}` : "",
+          hasTaxId(row.JIB) ? `JIB: ${row.JIB}` : "",
+          hasTaxId(row.PIB) ? `PIB: ${row.PIB}` : "",
         ]
           .filter(Boolean)
           .join(" | "),
@@ -93,15 +96,14 @@ function buildReportHTML(
         .join("<br/>");
 
       return `<tr style="background:${bg}">
-        <td>${row.redni_broj}</td>
-        <td>${[row.tip_dokumenta_el_kuf, row.broj_racuna].filter(Boolean).join(" - ") || "-"}</td>
-        <td>${displayDate(row.datum_dokumenta)}</td>
+        <td>${row.sifra}</td>
+        <td>${[row.tip_dokumenta, row.broj_dokumenta].filter(Boolean).join(" - ") || "-"}<div class="sub">${displayDate(row.datum_ulaza_dokumenta)}</div></td>
         <td>${partner}</td>
-        <td>${row.opis_dokumenta || "-"}</td>
-        <td class="num">${fmt(Number(row.ukupno_bez_pdv))}</td>
+        <td>${row.opis || "-"}</td>
+        <td class="num">${fmt(Number(row.vrednost_bez_pdv))}</td>
         <td class="num">${fmt(Number(row.iskazani_pdv))}</td>
         <td class="num">${fmt(Number(row.ulazni_pdv))}</td>
-        <td class="num">${fmt(Number(row.ulazni_pdv_uvozni))}</td>
+        <td class="num">${fmt(Number(row.ulazni_pdv_uvoz))}</td>
       </tr>`;
     })
     .join("");
@@ -115,30 +117,36 @@ function buildReportHTML(
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 9pt; color: #1a1a1a; padding: 12mm; }
 
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8mm; }
-  .header h1 { font-size: 14pt; font-weight: 700; color: ${PRIMARY}; }
-  .header .period { font-size: 9pt; color: #555; margin-top: 2px; }
-  .header .logo { font-size: 10pt; font-weight: 600; color: #333; text-align: right; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start;
+            border-bottom: 3px solid ${PRIMARY}; padding-bottom: 8px; margin-bottom: 10px; }
+  .header h1 { font-size: 13pt; font-weight: 700; color: ${PRIMARY}; text-transform: uppercase; }
+  .header .period { font-size: 9pt; color: #444; margin-top: 2px; }
+  .header .meta { font-size: 8pt; color: #999; margin-top: 4px; text-align: right; }
 
-  .summary { display: flex; gap: 6mm; margin-bottom: 6mm; flex-wrap: wrap; }
-  .summary-box { border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; min-width: 120px; }
-  .summary-box .label { font-size: 7pt; text-transform: uppercase; color: #888; letter-spacing: .04em; }
-  .summary-box .value { font-size: 9pt; font-weight: 700; color: #1a1a1a; }
+  .rekap-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+  .rekap { width: 130mm; }
+  .rekap-naslov { text-align: center; font-size: 12pt; font-weight: 700; letter-spacing: .06em; margin-bottom: 6px; }
+  .rekap table { width: 100%; border-collapse: collapse; }
+  .rekap td.label { border: 1px solid #999; padding: 4px 10px; font-size: 10pt; font-weight: 700; background: #fff; }
+  .rekap td.value { border: 1px solid #999; padding: 4px 10px; font-size: 10pt; font-weight: 700; text-align: center; background: #d9d9d9; }
+  .rekap-group-title { text-align: center; font-size: 10pt; font-weight: 700; margin-top: 8px; margin-bottom: 3px; }
+  .rekap-row { display: flex; justify-content: space-between; font-size: 10pt; color: #333; padding: 2px 0; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-  thead tr { background: #f5f5f5; }
-  th { padding: 4px 5px; text-align: left; font-size: 7.5pt; text-transform: uppercase;
-       letter-spacing: .04em; color: #555; border-bottom: 1.5px solid #ccc; white-space: nowrap; }
-  td { padding: 3px 5px; border-bottom: 1px solid #000; vertical-align: top; }
+  table.main { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  thead tr { background: ${PRIMARY}; }
+  th { padding: 4px 5px; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #fff;
+       letter-spacing: .03em; white-space: nowrap; }
+  th.num { text-align: right; }
+  td { padding: 3px 5px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .sub { font-size: 7pt; color: #888; margin-top: 1px; }
 
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tfoot td { font-weight: 700; border-top: 1.5px solid #aaa; background: #f9f9f9; padding: 4px 5px; }
-  .footer { margin-top: 8mm; font-size: 8pt; color: #888; text-align: right; }
+  .footer { margin-top: 8mm; font-size: 8pt; color: #aaa; display: flex; justify-content: space-between;
+            border-top: 1px solid #e5e7eb; padding-top: 6px; }
 
   @media print {
     body { padding: 8mm; }
     thead { display: table-header-group; }
-    tfoot { display: table-footer-group; }
     tr { page-break-inside: avoid; }
   }
 </style>
@@ -146,50 +154,60 @@ function buildReportHTML(
 <body>
   <div class="header">
     <div>
-      <h1>Knjiga ulaznih faktura (KUF)</h1>
-      <div class="period">Period: ${periodLabel || "–"} &nbsp;|&nbsp; Ukupno faktura: ${rows.length}</div>
+      <h1>Knjiga ulaznih faktura</h1>
+      <div class="period">za period: ${periodLabel || "–"}</div>
     </div>
-    <div class="logo">Izvještaj<br/><span style="font-weight:400;font-size:8pt;color:#999">${new Date().toLocaleDateString("sr-Latn-RS")}</span></div>
+    <div class="meta">
+      Datum štampe: ${new Date().toLocaleDateString("sr-Latn-RS")}<br/>
+      Broj zapisa: ${rows.length}
+    </div>
   </div>
 
-  <div class="summary">
-    <div class="summary-box"><div class="label">Domaće fakture</div><div class="value">${totals.domaceFakture.count}</div></div>
-    <div class="summary-box"><div class="label">Uvozne fakture</div><div class="value">${totals.importFakture.count}</div></div>
-    <div class="summary-box"><div class="label">Ukupno bez PDV</div><div class="value">${fmt(totals.ukupnoBezPdv)} KM</div></div>
-    <div class="summary-box"><div class="label">Iskazani PDV</div><div class="value">${fmt(totals.iskazaniPdv)} KM</div></div>
-    <div class="summary-box"><div class="label">Ulazni PDV</div><div class="value">${fmt(totals.ulazniPdv)} KM</div></div>
-    <div class="summary-box"><div class="label">Ulazni PDV uvozni</div><div class="value">${fmt(totals.ulazniPdvUvozni)} KM</div></div>
+  <div class="rekap-wrap">
+    <div class="rekap">
+      <div class="rekap-naslov">REKAPITULACIJA</div>
+      <table>
+        <tr><td class="label">Ukupno:</td><td class="value">${fmt(ukupno)}</td></tr>
+        <tr><td class="label">Vrijednost bez PDV:</td><td class="value">${fmt(totals.ukupnoBezPdv)}</td></tr>
+        <tr><td class="label">Iskazani PDV:</td><td class="value">${fmt(totals.iskazaniPdv)}</td></tr>
+        <tr><td class="label">Ulazni PDV:</td><td class="value">${fmt(totals.ulazniPdv)}</td></tr>
+        <tr><td class="label">Ulazni PDV (uvoz):</td><td class="value">${fmt(totals.ulazniPdvUvozni)}</td></tr>
+      </table>
+
+      <div class="rekap-group-title">DOMAĆE FAKTURE</div>
+      <div class="rekap-row"><span>Broj faktura:</span><span>${totals.domaceFakture.count}</span></div>
+      <div class="rekap-row"><span>Osnovica:</span><span>${fmt(totals.domaceFakture.osnovica)}</span></div>
+      <div class="rekap-row"><span>PDV:</span><span>${fmt(totals.domaceFakture.pdv)}</span></div>
+
+      <div class="rekap-group-title">UVOZNE FAKTURE</div>
+      <div class="rekap-row"><span>Broj faktura:</span><span>${totals.importFakture.count}</span></div>
+      <div class="rekap-row"><span>Osnovica:</span><span>${fmt(totals.importFakture.osnovica)}</span></div>
+      <div class="rekap-row"><span>PDV (uvozni):</span><span>${fmt(totals.importFakture.pdv)}</span></div>
+    </div>
   </div>
 
-  <table>
+  <table class="main">
     <thead>
       <tr>
-        <th>R.br</th>
-        <th>Br. fakture</th>
-        <th>Datum dokumenta</th>
+        <th>RB</th>
+        <th>Dokument</th>
         <th>Partner</th>
         <th>Opis</th>
-        <th class="num">Ukupno bez PDV</th>
-        <th class="num">Iskazani PDV</th>
+        <th class="num">Osnovica</th>
+        <th class="num">Iskaz. PDV</th>
         <th class="num">Ulazni PDV</th>
-        <th class="num">Ulazni PDV uvozni</th>
+        <th class="num">Ulazni PDV (uvoz)</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml}
+      ${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:30px;">Nema podataka za izabrani period.</td></tr>`}
     </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="5">UKUPNO — ${rows.length} faktura</td>
-        <td class="num">${fmt(totals.ukupnoBezPdv)}</td>
-        <td class="num">${fmt(totals.iskazaniPdv)}</td>
-        <td class="num">${fmt(totals.ulazniPdv)}</td>
-        <td class="num">${fmt(totals.ulazniPdvUvozni)}</td>
-      </tr>
-    </tfoot>
   </table>
 
-  <div class="footer">Generisano: ${new Date().toLocaleString("sr-Latn-RS")}</div>
+  <div class="footer">
+    <span>KUF — knjiga ulaznih faktura</span>
+    <span>Generisano: ${new Date().toLocaleString("sr-Latn-RS")}</span>
+  </div>
 </body>
 </html>`;
 }

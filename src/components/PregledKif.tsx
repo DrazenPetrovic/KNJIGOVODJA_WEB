@@ -1,18 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BookMarked,
   CalendarDays,
+  CreditCard,
   Filter,
+  Landmark,
   Loader2,
   Printer,
   Receipt,
+  RefreshCcw,
   Search,
+  Tags,
+  TrendingUp,
 } from "lucide-react";
-import { FixedSizeList, ListChildComponentProps } from "react-window";
-import { PrintModal } from "./PrintModal"; // putanja prema tvom folderu
+import { PrintModal } from "./PrintModal";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3003";
 const PRIMARY = "#785E9E";
-const SECONDARY = "#8FC74A";
+const ACCENT = "#8FC74A";
 
 interface KifRow {
   sifra_kif: number;
@@ -38,21 +43,14 @@ interface KifRow {
 
 type DateFilterMode = "day" | "period";
 
-// Grupiranje sa , i decimalni sa . (npr. 1,234.56)
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("en-US", {
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
-};
 
-// MP → blaga ljubičasta tinta (PRIMARY), VP → blaga zelena tinta (SECONDARY)
-const rowStyle = (vrsta: string): React.CSSProperties => {
-  const v = (vrsta || "").toUpperCase();
-  if (v.startsWith("MP")) return { background: `${PRIMARY}18` }; // ~10% opacity
-  if (v.startsWith("VP")) return { background: `${SECONDARY}22` }; // ~13% opacity
-  return {};
-};
+const formatIznos = (v: number | null | undefined) =>
+  `${formatCurrency(Number(v ?? 0))} KM`;
 
 const getDateOnly = (dateString: string) => {
   if (!dateString) return "";
@@ -60,9 +58,7 @@ const getDateOnly = (dateString: string) => {
     ? dateString
     : dateString.replace(" ", "T");
   const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
+  if (Number.isNaN(parsed.getTime())) return "";
   const year = parsed.getFullYear();
   const month = String(parsed.getMonth() + 1).padStart(2, "0");
   const day = String(parsed.getDate()).padStart(2, "0");
@@ -76,9 +72,14 @@ const displayDate = (dateString: string) => {
   return parsed.toLocaleDateString("sr-Latn-RS");
 };
 
-const formatDuration = (ms: number) => {
-  if (ms < 1000) return `${Math.round(ms)} ms`;
-  return `${(ms / 1000).toFixed(2)} s`;
+// dd.MM.yyyy — za prikaz preko polja "Datum od/do" (vrijednost polja ostaje
+// yyyy-MM-dd, samo je vizuelno prekriven ovim formatom).
+const formatDatumDMY = (v: string | undefined | null): string | null => {
+  if (!v) return null;
+  const d = new Date(`${v}T00:00:00`);
+  if (isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}.`;
 };
 
 const toText = (value: unknown) => String(value ?? "").trim();
@@ -95,7 +96,6 @@ const isOption2 = (row: Pick<KifRow, "pib" | "entitet">) => {
   return hasPib || isInoPartner;
 };
 
-// Podrazumijevani period: danas unazad 32 dana (operater ga po potrebi proširi kroz filter)
 const dateToInputValue = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -103,32 +103,92 @@ const dateToInputValue = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const getDefaultRange = () => {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - 32);
-  return { from: dateToInputValue(from), to: dateToInputValue(to) };
+// Podrazumijevani period: prvi dan tekućeg mjeseca do danas — isto kao u
+// KANCELARIJA_WEB (Kif.tsx: prviDanMjeseca() / danas()).
+const prviDanMjeseca = () => {
+  const d = new Date();
+  return dateToInputValue(new Date(d.getFullYear(), d.getMonth(), 1));
 };
+
+const danas = () => dateToInputValue(new Date());
+
+const getDefaultRange = () => ({ from: prviDanMjeseca(), to: danas() });
 
 const DEFAULT_RANGE = getDefaultRange();
 
-// ─── Grid kolone (dijele header i virtualizovane redove) ─────────────────────
+function StatTile({
+  icon,
+  vrijednost,
+  naziv,
+  boja,
+  podnaslov,
+  izracunato,
+}: {
+  icon: React.ReactNode;
+  vrijednost: string;
+  naziv: string;
+  boja: string;
+  podnaslov?: string;
+  izracunato?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 bg-white rounded-2xl shadow-sm px-4 py-3 flex-1 min-w-[170px] ${
+        izracunato ? "border-2 border-dashed" : "border border-gray-100"
+      }`}
+      style={izracunato ? { borderColor: boja } : undefined}
+    >
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: `${boja}1f` }}
+      >
+        <div style={{ color: boja }}>{icon}</div>
+      </div>
+      <div className="min-w-0">
+        <div className="text-lg font-bold leading-tight text-gray-800">
+          {vrijednost}
+        </div>
+        <div className="text-xs text-gray-400 truncate">{naziv}</div>
+        {podnaslov && (
+          <div
+            className="text-[10px] font-semibold truncate"
+            style={{ color: boja }}
+          >
+            {podnaslov}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Windowing tabele — kod velikog broja redova drži se u DOM-u samo vidljivi
+// opseg (+ overscan), a razlika u visini se nadoknađuje "spacer" red prije/
+// poslije, umjesto da se cijela lista renderuje odjednom.
 const GRID_COLS =
   "90px 150px 110px minmax(220px,1fr) 110px 100px 110px 90px 110px 90px";
 const GRID_MIN_WIDTH = 1180;
-const ROW_HEIGHT = 76;
+const ROW_HEIGHT_PX = 76;
+const OVERSCAN_REDOVA = 10;
+const PRAG_VIRTUALIZACIJE = 150;
 
-function KifRowItem({
-  index,
-  style,
-  data,
-}: ListChildComponentProps<KifRow[]>) {
-  const row = data[index];
+const rowBg = (vrsta: string): string => {
+  const v = (vrsta || "").toUpperCase();
+  if (v.startsWith("MP")) return `${PRIMARY}18`;
+  if (v.startsWith("VP")) return `${ACCENT}22`;
+  return "transparent";
+};
+
+function KifRowItem({ row }: { row: KifRow }) {
   const opt2 = isOption2(row);
 
   return (
     <div
-      style={{ ...style, ...rowStyle(row.vrsta_racuna), gridTemplateColumns: GRID_COLS }}
+      style={{
+        height: ROW_HEIGHT_PX,
+        gridTemplateColumns: GRID_COLS,
+        background: rowBg(row.vrsta_racuna),
+      }}
       className="grid border-b border-gray-100 transition-colors hover:brightness-95"
     >
       <div className="px-4 py-3 text-sm text-gray-700 truncate self-center">
@@ -218,6 +278,36 @@ export function PregledKif() {
     periodTo: DEFAULT_RANGE.to,
     searchTerm: "",
   });
+
+  // Callback ref umjesto useRef+useEffect — tabela se pri svakom novom
+  // fetch-u (loading true/false) unmountuje i remountuje, pa bi obični
+  // useRef ostavio scroll listener zakačen na stari, odvojeni DOM čvor
+  // (jeVirtualizovano se ne mijenja pa se efekat ne bi ponovo pokrenuo).
+  const scrollElRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [visinaKontejnera, setVisinaKontejnera] = useState(600);
+
+  const scrollRef = useCallback((node: HTMLDivElement | null) => {
+    scrollElRef.current = node;
+    if (node) {
+      setVisinaKontejnera(node.clientHeight);
+      setScrollTop(node.scrollTop);
+    }
+  }, []);
+
+  const dayDateRef = useRef<HTMLInputElement>(null);
+  const periodFromRef = useRef<HTMLInputElement>(null);
+  const periodToRef = useRef<HTMLInputElement>(null);
+
+  const otvoriPicker = (ref: React.RefObject<HTMLInputElement>) => {
+    const input = ref.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    } else {
+      input.focus();
+    }
+  };
 
   // Procedura sad prima opseg datuma - server vraća samo taj period, ne cijelu istoriju
   const fetchData = async (datumOd: string, datumDo: string) => {
@@ -344,109 +434,191 @@ export function PregledKif() {
     );
   }, [filteredRows]);
 
-  const listHeight = Math.min(
-    640,
-    Math.max(ROW_HEIGHT * 3, filteredRows.length * ROW_HEIGHT),
+  const ukupnoOsnovica = useMemo(
+    () => totals.option1.osnova + totals.option2.osnova,
+    [totals],
+  );
+  const ukupnoPdv = useMemo(
+    () => totals.option1.pdv + totals.option2.pdv,
+    [totals],
+  );
+  // KIF nema direktno veleprodajnu vrednost (VPC prije rabata) — izvodi se iz
+  // osnovice (VPC nakon rabata) i rabata, isto kao u KANCELARIJA_WEB Kif.tsx.
+  const veleprodajnaVrednost = useMemo(
+    () => ukupnoOsnovica + totals.rabat,
+    [ukupnoOsnovica, totals.rabat],
   );
 
+  const jeVirtualizovano = filteredRows.length > PRAG_VIRTUALIZACIJE;
+
+  // Resize se prati globalno (jedan listener za život komponente) — scroll se
+  // prati direktno preko onScroll na div-u, koji React vezuje/otkačinje sam
+  // pri svakom mount/unmount ciklusu tabele, pa nema stale-node problema.
+  useEffect(() => {
+    const naResize = () => {
+      if (scrollElRef.current) {
+        setVisinaKontejnera(scrollElRef.current.clientHeight);
+      }
+    };
+    window.addEventListener("resize", naResize);
+    return () => window.removeEventListener("resize", naResize);
+  }, []);
+
+  let startIndex = 0;
+  let endIndex = filteredRows.length;
+  if (jeVirtualizovano) {
+    const prviVidljivi = Math.floor(scrollTop / ROW_HEIGHT_PX);
+    const brojVidljivih = Math.ceil(visinaKontejnera / ROW_HEIGHT_PX);
+    startIndex = Math.max(0, prviVidljivi - OVERSCAN_REDOVA);
+    endIndex = Math.min(
+      filteredRows.length,
+      prviVidljivi + brojVidljivih + OVERSCAN_REDOVA,
+    );
+  }
+  const vidljiviRedovi = jeVirtualizovano
+    ? filteredRows.slice(startIndex, endIndex)
+    : filteredRows;
+  const visinaPrijeRedova = startIndex * ROW_HEIGHT_PX;
+  const visinaPoslijeRedova = (filteredRows.length - endIndex) * ROW_HEIGHT_PX;
+
   return (
-    <div className="space-y-5">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div className="min-w-[220px] flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: "#ede8f5" }}
-              >
-                <Receipt size={16} style={{ color: PRIMARY }} />
-              </span>
-              <h2 className="text-base sm:text-lg font-bold text-gray-800">
-                Knjiga izlaznih faktura
-              </h2>
-            </div>
-          </div>
-          <button
-            onClick={() => setPrintOpen(true)}
-            title="Štampaj"
-            className="ml-2 flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-[#785E9E] hover:text-[#785E9E] transition-colors"
-          >
-            <Printer size={14} />
-            Štampaj
-          </button>
-
-          {loading ? (
+    <div className="space-y-4">
+      {/* Naslov */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#ede8f5]">
+          <BookMarked size={20} style={{ color: PRIMARY }} />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-gray-800">KIF</h2>
+          <p className="text-xs text-gray-400">
+            Knjiga izlaznih faktura za izabrani period
+          </p>
+        </div>
+        {loading ? (
+          <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+            <Loader2 size={13} className="animate-spin" />
+            Učitavanje...
+          </span>
+        ) : (
+          loadTimeMs !== null && (
             <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
-              <Loader2 size={13} className="animate-spin" />
-              Učitavanje...
+              Učitano za{" "}
+              {loadTimeMs < 1000
+                ? `${Math.round(loadTimeMs)} ms`
+                : `${(loadTimeMs / 1000).toFixed(2)} s`}
             </span>
-          ) : (
-            loadTimeMs !== null && (
-              <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
-                Učitano za {formatDuration(loadTimeMs)}
-              </span>
-            )
-          )}
+          )
+        )}
+        <button
+          type="button"
+          onClick={() => setPrintOpen(true)}
+          disabled={loading || filteredRows.length === 0}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-40"
+          style={{ background: PRIMARY }}
+        >
+          <Printer size={15} />
+          Štampaj
+        </button>
+      </div>
 
-          <div className="flex flex-wrap items-end justify-end gap-2">
-            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-              <button
-                onClick={() => setFilterMode("day")}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                style={
-                  filterMode === "day"
-                    ? { background: PRIMARY, color: "#fff" }
-                    : { color: "#4b5563" }
-                }
-              >
-                Po danu
-              </button>
-              <button
-                onClick={() => setFilterMode("period")}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                style={
-                  filterMode === "period"
-                    ? { background: PRIMARY, color: "#fff" }
-                    : { color: "#4b5563" }
-                }
-              >
-                Za period
-              </button>
-            </div>
+      {/* Filteri */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => setFilterMode("day")}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+              style={
+                filterMode === "day"
+                  ? { background: PRIMARY, color: "#fff" }
+                  : { color: "#4b5563" }
+              }
+            >
+              Po danu
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode("period")}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+              style={
+                filterMode === "period"
+                  ? { background: PRIMARY, color: "#fff" }
+                  : { color: "#4b5563" }
+              }
+            >
+              Za period
+            </button>
+          </div>
 
-            <div className="min-w-[160px]">
-              {filterMode === "day" ? (
-                <div className="relative">
-                  <CalendarDays
-                    size={14}
-                    className="absolute left-2.5 top-2.5 text-gray-400"
-                  />
-                  <input
-                    type="date"
-                    value={dayDate}
-                    onChange={(e) => setDayDate(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 bg-white pl-8 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
-                  />
+          <div>
+            <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+              {filterMode === "day" ? "Datum" : "Datum od / do"}
+            </span>
+            {filterMode === "day" ? (
+              <div
+                className="relative cursor-pointer"
+                onClick={() => otvoriPicker(dayDateRef)}
+              >
+                <CalendarDays
+                  size={14}
+                  className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none"
+                />
+                <input
+                  ref={dayDateRef}
+                  type="date"
+                  value={dayDate}
+                  onChange={(e) => setDayDate(e.target.value)}
+                  style={{ color: "transparent" }}
+                  className="rounded-xl border border-gray-200 bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#785E9E] transition-colors cursor-pointer"
+                />
+                <div className="absolute inset-0 flex items-center pl-8 pr-3 text-sm text-gray-800 pointer-events-none">
+                  {formatDatumDMY(dayDate) ?? "Izaberite datum"}
                 </div>
-              ) : (
-                <div className="flex gap-2">
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <div
+                  className="relative cursor-pointer"
+                  onClick={() => otvoriPicker(periodFromRef)}
+                >
                   <input
+                    ref={periodFromRef}
                     type="date"
                     value={periodFrom}
                     onChange={(e) => setPeriodFrom(e.target.value)}
-                    className="w-[130px] rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
+                    style={{ color: "transparent" }}
+                    className="w-[140px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#785E9E] transition-colors cursor-pointer"
                   />
+                  <div className="absolute inset-0 flex items-center px-3 text-sm text-gray-800 pointer-events-none">
+                    {formatDatumDMY(periodFrom) ?? "Izaberite datum"}
+                  </div>
+                </div>
+                <div
+                  className="relative cursor-pointer"
+                  onClick={() => otvoriPicker(periodToRef)}
+                >
                   <input
+                    ref={periodToRef}
                     type="date"
                     value={periodTo}
                     onChange={(e) => setPeriodTo(e.target.value)}
-                    className="w-[130px] rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
+                    style={{ color: "transparent" }}
+                    className="w-[140px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#785E9E] transition-colors cursor-pointer"
                   />
+                  <div className="absolute inset-0 flex items-center px-3 text-sm text-gray-800 pointer-events-none">
+                    {formatDatumDMY(periodTo) ?? "Izaberite datum"}
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
 
-            <div className="relative min-w-[220px]">
+          <div className="min-w-[220px]">
+            <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+              Pretraga
+            </span>
+            <div className="relative">
               <Search
                 size={14}
                 className="absolute left-2.5 top-2.5 text-gray-400"
@@ -456,99 +628,70 @@ export function PregledKif() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Br fakture, vrsta, partner..."
-                className="w-full rounded-lg border border-gray-300 bg-white pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#785E9E]/30 focus:border-[#785E9E]"
+                className="w-full rounded-xl border border-gray-200 bg-white pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-[#785E9E] transition-colors"
               />
             </div>
-
-            <button
-              onClick={applyFilters}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: PRIMARY, color: "#fff" }}
-              disabled={loading || filtersMissingDates}
-            >
-              <Filter size={14} />
-              Primijeni filtere
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 overflow-hidden">
-          <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 bg-[#8FC74A22]">
-            {[
-              { label: "PDV obveznici", value: "" },
-              { label: "Br. faktura", value: String(totals.option2.count) },
-              {
-                label: "Osnova PDV",
-                value: formatCurrency(totals.option2.osnova) + " KM",
-              },
-              {
-                label: "PDV",
-                value: formatCurrency(totals.option2.pdv) + " KM",
-              },
-            ].map((s) => (
-              <div
-                key={`o2-${s.label}`}
-                className="flex items-center gap-2 px-3 py-1.5"
-              >
-                <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold whitespace-nowrap">
-                  {s.label}
-                </span>
-                <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                  {s.value}
-                </span>
-              </div>
-            ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 border-t border-gray-200 bg-[#785E9E18]">
-            {[
-              { label: "PDV neobveznici", value: "" },
-              { label: "Br. faktura", value: String(totals.option1.count) },
-              {
-                label: "Osnova PDV",
-                value: formatCurrency(totals.option1.osnova) + " KM",
-              },
-              {
-                label: "PDV",
-                value: formatCurrency(totals.option1.pdv) + " KM",
-              },
-            ].map((s) => (
-              <div
-                key={`o1-${s.label}`}
-                className="flex items-center gap-2 px-3 py-1.5"
-              >
-                <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold whitespace-nowrap">
-                  {s.label}
-                </span>
-                <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                  {s.value}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-100 border-t border-gray-200 bg-white">
-            {[
-              { label: "Ukupno", value: formatCurrency(totals.ukupno) + " KM" },
-              { label: "Rabat", value: formatCurrency(totals.rabat) + " KM" },
-              { label: "Sve fakture", value: String(filteredRows.length) },
-            ].map((s) => (
-              <div
-                key={`all-${s.label}`}
-                className="flex items-center gap-2 px-3 py-1.5"
-              >
-                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold whitespace-nowrap">
-                  {s.label}
-                </span>
-                <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
-                  {s.value}
-                </span>
-              </div>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={applyFilters}
+            disabled={loading || filtersMissingDates}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50"
+            style={{ background: PRIMARY }}
+          >
+            <Filter size={14} />
+            Prikaži
+            {!loading && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-bold">
+                {filteredRows.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
+      {/* Statistika */}
+      {!loading && !error && (
+        <div className="flex flex-wrap gap-3">
+          <StatTile
+            icon={<TrendingUp size={16} />}
+            vrijednost={formatIznos(totals.ukupno)}
+            naziv="Ukupno"
+            boja={ACCENT}
+          />
+          <StatTile
+            icon={<Landmark size={16} />}
+            vrijednost={formatIznos(veleprodajnaVrednost)}
+            naziv="Veleprodajna vrijednost"
+            boja={PRIMARY}
+          />
+          <StatTile
+            icon={<CreditCard size={16} />}
+            vrijednost={formatIznos(totals.rabat)}
+            naziv="Rabat"
+            boja={PRIMARY}
+          />
+          <StatTile
+            icon={<Receipt size={16} />}
+            vrijednost={formatIznos(ukupnoOsnovica)}
+            naziv="Osnovica"
+            podnaslov={`Obveznici ${formatIznos(totals.option2.osnova)} · Neobveznici ${formatIznos(totals.option1.osnova)}`}
+            boja={PRIMARY}
+            izracunato
+          />
+          <StatTile
+            icon={<Tags size={16} />}
+            vrijednost={formatIznos(ukupnoPdv)}
+            naziv="PDV"
+            podnaslov={`Obveznici ${formatIznos(totals.option2.pdv)} · Neobveznici ${formatIznos(totals.option1.pdv)}`}
+            boja={PRIMARY}
+            izracunato
+          />
+        </div>
+      )}
+
+      {/* Tabela */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="p-8 flex flex-col items-center justify-center gap-2 text-gray-500">
@@ -560,10 +703,29 @@ export function PregledKif() {
             Učitavanje podataka...
           </div>
         ) : error ? (
-          <div className="p-8 text-center text-red-600">{error}</div>
+          <div className="p-8 flex flex-col items-center justify-center gap-2 text-center">
+            <p className="text-sm text-red-500">{error}</p>
+            <button
+              type="button"
+              onClick={() =>
+                fetchData(
+                  filterMode === "day" ? dayDate : periodFrom,
+                  filterMode === "day" ? dayDate : periodTo,
+                )
+              }
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ background: `${PRIMARY}1f`, color: PRIMARY }}
+            >
+              <RefreshCcw size={12} className="inline mr-1" />
+              Pokušaj ponovo
+            </button>
+          </div>
         ) : filteredRows.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            Nema podataka za izabrane filtere.
+          <div className="p-8 flex flex-col items-center justify-center gap-2 text-gray-300">
+            <BookMarked size={28} />
+            <p className="text-sm text-gray-400">
+              Nema podataka za izabrane filtere.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -588,16 +750,29 @@ export function PregledKif() {
                 <div className="text-right px-4 py-3">PDV (obv.)</div>
               </div>
 
-              <FixedSizeList
-                height={listHeight}
-                width="100%"
-                itemCount={filteredRows.length}
-                itemSize={ROW_HEIGHT}
-                itemData={filteredRows}
-                overscanCount={8}
+              <div
+                ref={jeVirtualizovano ? scrollRef : undefined}
+                onScroll={
+                  jeVirtualizovano
+                    ? (e) => setScrollTop(e.currentTarget.scrollTop)
+                    : undefined
+                }
+                style={
+                  jeVirtualizovano
+                    ? { maxHeight: "70vh", overflowY: "auto" }
+                    : undefined
+                }
               >
-                {KifRowItem}
-              </FixedSizeList>
+                {jeVirtualizovano && visinaPrijeRedova > 0 && (
+                  <div style={{ height: visinaPrijeRedova }} />
+                )}
+                {vidljiviRedovi.map((row) => (
+                  <KifRowItem key={row.sifra_kif} row={row} />
+                ))}
+                {jeVirtualizovano && visinaPoslijeRedova > 0 && (
+                  <div style={{ height: visinaPoslijeRedova }} />
+                )}
+              </div>
             </div>
           </div>
         )}

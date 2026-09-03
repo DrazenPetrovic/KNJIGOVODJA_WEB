@@ -23,9 +23,7 @@ export const getPregledKIF = async (datumOd, datumDo) => {
 
 export const getPregledKUF = async () => {
   return withConnection(async (connection) => {
-    const [rows] = await connection.execute(
-      "CALL sp_pregled_knjige_ulaznih_faktura()",
-    );
+    const [rows] = await connection.execute("CALL erp.kuf_pregled()");
 
     const racuni = rows?.[0] || [];
 
