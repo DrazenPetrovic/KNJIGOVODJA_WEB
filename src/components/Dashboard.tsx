@@ -1,12 +1,14 @@
 import ReactDOM from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import {
+  Banknote,
   BarChart2,
   Calendar,
   ChevronDown,
   ChevronRight,
   FileText,
   FolderArchive,
+  Landmark,
   LogOut,
   Receipt,
   Settings,
@@ -20,6 +22,8 @@ import { KalkulacijaRobe } from "./KalkulacijaRobe";
 import { MjesecniPrihodi } from "./MjesecniPrihodi";
 import { Nivelacije } from "./Nivelacije";
 import { UtrosakMaterijala } from "./UtrosakMaterijala";
+import { IzvodiPregled } from "./IzvodiPregled";
+import { BlagajnaPregled } from "./BlagajnaPregled";
 
 const PRIMARY = "#785E9E";
 const PRIMARY_DARK = "#604880";
@@ -47,8 +51,29 @@ type MenuSection =
   | "pregledi-nivelacija-proizvoda"
   | "pregledi-nivelacija-robe"
   | "pregledi-utrosak-materijala"
+  | "pregledi-izvodi"
+  | "pregledi-blagajna"
   | "narudzbe-pregled"
   | null;
+
+// Naslov aktivnog pregleda koji se prikazuje na sredini zaglavlja.
+const NASLOVI_SEKCIJA: Partial<
+  Record<
+    NonNullable<MenuSection>,
+    { naslov: string; opis: string; ikona: typeof Landmark }
+  >
+> = {
+  "pregledi-izvodi": {
+    naslov: "Pregled izvoda",
+    opis: "Bankovni izvodi i uplate po izvodu",
+    ikona: Landmark,
+  },
+  "pregledi-blagajna": {
+    naslov: "Pregled blagajne",
+    opis: "Nalozi blagajne i uplate po nalogu",
+    ikona: Banknote,
+  },
+};
 
 export function Dashboard({
   username,
@@ -72,6 +97,9 @@ export function Dashboard({
   const isAdministrator = vrstaRadnika === 1;
   const isStandardUser = vrstaRadnika === 10;
   const roleLabel = isAdministrator ? "Administrator" : "Korisnik";
+  const aktivniNaslov = activeSection
+    ? NASLOVI_SEKCIJA[activeSection]
+    : undefined;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -131,7 +159,20 @@ export function Dashboard({
     <div className="min-h-screen" style={{ background: "#f4f1f9" }}>
       {/* Header */}
       <header style={{ background: PRIMARY }} className="text-white shadow-lg">
-        <div className="mx-[15px] px-[5px] py-3 flex items-center justify-between">
+        <div className="relative mx-[15px] px-[5px] py-3 flex items-center justify-between">
+          {aktivniNaslov && (
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-3 pointer-events-none">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/15">
+                <aktivniNaslov.ikona size={20} className="text-white" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-tight">
+                  {aktivniNaslov.naslov}
+                </p>
+                <p className="text-xs text-white/60">{aktivniNaslov.opis}</p>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <img
               src={`${import.meta.env.BASE_URL}foto/karpas_logo_software.png`}
@@ -712,6 +753,74 @@ export function Dashboard({
                           </span>
                           Utrošak materijala
                         </button>
+
+                        <button
+                          onClick={() => handleSectionChange("pregledi-izvodi")}
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-izvodi",
+                          )}
+                          style={
+                            activeSection === "pregledi-izvodi"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-izvodi"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <Landmark
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-izvodi"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Izvodi
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleSectionChange("pregledi-blagajna")
+                          }
+                          className={dropdownItemClass(
+                            activeSection === "pregledi-blagajna",
+                          )}
+                          style={
+                            activeSection === "pregledi-blagajna"
+                              ? { background: PRIMARY }
+                              : {}
+                          }
+                        >
+                          <span
+                            className="flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0"
+                            style={{
+                              background:
+                                activeSection === "pregledi-blagajna"
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "#ede8f5",
+                            }}
+                          >
+                            <Banknote
+                              size={13}
+                              style={{
+                                color:
+                                  activeSection === "pregledi-blagajna"
+                                    ? "#fff"
+                                    : PRIMARY,
+                              }}
+                            />
+                          </span>
+                          Blagajna
+                        </button>
                       </div>
                     </div>,
                     document.body,
@@ -800,6 +909,10 @@ export function Dashboard({
         {activeSection === "pregledi-utrosak-materijala" && (
           <UtrosakMaterijala />
         )}
+
+        {activeSection === "pregledi-izvodi" && <IzvodiPregled />}
+
+        {activeSection === "pregledi-blagajna" && <BlagajnaPregled />}
 
         {activeSection === "narudzbe-pregled" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">

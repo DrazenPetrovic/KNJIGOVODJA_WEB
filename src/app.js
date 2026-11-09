@@ -10,6 +10,8 @@ import authRoutes from "./routes/auth.routes.js";
 import preglediRoutes from "./routes/pregledi.routes.js";
 import printersRoutes from "./routes/printers.route.js";
 import mjesecniPrihodiRoutes from "./routes/mjesecniPrihodi.routes.js";
+import izvodiRoutes from "./routes/izvodi.routes.js";
+import blagajnaRoutes from "./routes/blagajna.routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +44,8 @@ export const createApp = () => {
   app.use("/api/auth", authRoutes);
   app.use("/api/pregledi", preglediRoutes);
   app.use("/api/mjesecni-prihodi", mjesecniPrihodiRoutes);
+  app.use("/api/izvodi", izvodiRoutes);
+  app.use("/api/blagajna", blagajnaRoutes);
 
   // Serviranje frontenda u produkciji
   if (env.NODE_ENV === "production") {
