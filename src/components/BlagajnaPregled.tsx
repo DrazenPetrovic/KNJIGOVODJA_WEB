@@ -719,6 +719,7 @@ export function BlagajnaPregled() {
                     const iznos = Number(u.uplaceno) || 0;
                     return {
                       key: `u-${u.sifra_uplate}`,
+                      sifraPartnera: u.sifra_partnera ?? null,
                       partner:
                         u.naziv_partnera ?? `Partner #${u.sifra_partnera}`,
                       datum: u.datum_uplate,
@@ -740,6 +741,7 @@ export function BlagajnaPregled() {
                   }),
                   ...isplateBlagajne.map((isp) => ({
                     key: `i-${isp.sifra}`,
+                    sifraPartnera: isp.sifra_dobavljaca ?? null,
                     partner:
                       isp.naziv_dobavljaca ??
                       `Dobavljač #${isp.sifra_dobavljaca}`,
@@ -952,6 +954,10 @@ export function BlagajnaPregled() {
                                     Number(blagajna.krajnje_stanje) || 0,
                                 },
                                 transakcije: transakcije.map((t) => ({
+                                  sifraPartnera:
+                                    t.sifraPartnera === null
+                                      ? ""
+                                      : String(t.sifraPartnera),
                                   partner: t.partner,
                                   datum: formatDatum(t.datum),
                                   brojRacuna: t.brojRacuna,
@@ -988,6 +994,9 @@ export function BlagajnaPregled() {
                             <table className="table-auto">
                               <thead>
                                 <tr style={{ background: PRIMARY }}>
+                                  <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wide whitespace-nowrap text-white">
+                                    Šifra
+                                  </th>
                                   <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wide whitespace-nowrap text-white">
                                     Partner
                                   </th>
@@ -1031,6 +1040,9 @@ export function BlagajnaPregled() {
                                             : "bg-green-50 hover:bg-green-100"
                                       }`}
                                     >
+                                      <td className="px-3 py-1 text-sm text-right text-gray-500 font-mono border-t border-gray-50 whitespace-nowrap">
+                                        {t.sifraPartnera ?? "–"}
+                                      </td>
                                       <td className="px-3 py-1 text-sm text-gray-700 border-t border-gray-50">
                                         {t.partner}
                                       </td>

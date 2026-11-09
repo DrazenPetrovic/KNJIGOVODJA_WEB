@@ -19,6 +19,7 @@ export interface NalogZaStampu {
 
 // Transakcija naloga — uplata ili isplata dobavljaču, već pripremljena za prikaz.
 export interface TransakcijaZaStampu {
+  sifraPartnera: string;
   partner: string;
   datum: string;
   brojRacuna: string;
@@ -88,6 +89,7 @@ function buildBlagajnaHTML(
           : "";
       return `<tr style="background:${bg}">
         <td class="c">${i + 1}</td>
+        <td class="num">${esc(t.sifraPartnera || "–")}</td>
         <td>${esc(t.partner)}</td>
         <td class="nw">${esc(t.datum)}</td>
         <td class="nw">${esc(t.brojRacuna)}</td>
@@ -191,6 +193,7 @@ function buildBlagajnaHTML(
     <thead>
       <tr>
         <th style="text-align:center">RB</th>
+        <th class="num">Šifra</th>
         <th>Partner</th>
         <th>Datum</th>
         <th>Broj računa</th>
@@ -202,12 +205,12 @@ function buildBlagajnaHTML(
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || `<tr><td colspan="9" style="text-align:center;color:#aaa;padding:30px;">Nema transakcija na ovom nalogu.</td></tr>`}
+      ${rowsHtml || `<tr><td colspan="10" style="text-align:center;color:#aaa;padding:30px;">Nema transakcija na ovom nalogu.</td></tr>`}
     </tbody>
     ${
       transakcije.length > 0
         ? `<tfoot><tr>
-        <td></td><td colspan="3">UKUPNO</td>
+        <td></td><td colspan="4">UKUPNO</td>
         <td class="num up">${fmt(zbirUplata)}</td>
         <td class="num is">${fmt(zbirIsplata)}</td>
         <td class="num pdv">${imaPdv ? `Isk: ${fmt(zbirIskazani)}<br/>Ul: ${fmt(zbirUlazni)}` : ""}</td>
