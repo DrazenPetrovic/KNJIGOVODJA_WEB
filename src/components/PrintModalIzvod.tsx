@@ -20,6 +20,7 @@ export interface IzvodZaStampu {
 
 // Stavka izvoda — već pripremljena za prikaz (naziv partnera, vrsta, smjer).
 export interface StavkaZaStampu {
+  sifraPartnera: string;
   partner: string;
   datum: string;
   uplata: number | null;
@@ -80,6 +81,7 @@ function buildIzvodHTML(izvod: IzvodZaStampu, stavke: StavkaZaStampu[]) {
             : "#ffffff";
       return `<tr style="background:${bg}">
         <td class="c">${i + 1}</td>
+        <td class="num">${esc(s.sifraPartnera)}</td>
         <td>${esc(s.partner)}</td>
         <td class="nw">${esc(s.datum)}</td>
         <td class="num up">${s.uplata !== null ? fmt(s.uplata) : ""}</td>
@@ -182,6 +184,7 @@ function buildIzvodHTML(izvod: IzvodZaStampu, stavke: StavkaZaStampu[]) {
     <thead>
       <tr>
         <th style="text-align:center">RB</th>
+        <th class="num">Šifra</th>
         <th>Partner</th>
         <th>Datum</th>
         <th class="num">Uplate</th>
@@ -191,12 +194,12 @@ function buildIzvodHTML(izvod: IzvodZaStampu, stavke: StavkaZaStampu[]) {
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:30px;">Nema stavki na ovom izvodu.</td></tr>`}
+      ${rowsHtml || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:30px;">Nema stavki na ovom izvodu.</td></tr>`}
     </tbody>
     ${
       stavke.length > 0
         ? `<tfoot><tr>
-        <td></td><td colspan="2">UKUPNO</td>
+        <td></td><td colspan="3">UKUPNO</td>
         <td class="num up">${fmt(zbirUplata)}</td>
         <td class="num is">${fmt(zbirIsplata)}</td>
         <td colspan="2"></td>

@@ -182,6 +182,13 @@ export function formatDatumVrijeme(v: string | number | null | undefined) {
   return `${dd}.${mm}.${d.getFullYear()} ${hh}:${mi}:${ss}`;
 }
 
+// Šifra partnera stavke — kod transfera između računa nema partnera.
+function sifraPartneraStavke(u: UplataRed) {
+  if (String(u.tip_stavke ?? "").toUpperCase() === "TRANSFER") return "–";
+  const s = u.sifra_partnera;
+  return s === null || s === undefined || s === "" ? "–" : String(s);
+}
+
 function IzvodStatusBadge({ v }: { v: number | string | null }) {
   const zatvoren = Number(v) === 1;
   return (
@@ -437,6 +444,7 @@ export function IzvodiPregled() {
         const vrsta = stavkaInfo(u);
         const iznos = Number(u.uplaceno) || 0;
         return {
+          sifraPartnera: sifraPartneraStavke(u),
           partner: nazivPartnera(u),
           datum: formatDatum(u.datum_uplate ?? izvod.datum_izvoda),
           uplata: vrsta.tip === "uplata" ? iznos : null,
@@ -922,6 +930,9 @@ export function IzvodiPregled() {
                             <table className="table-auto">
                               <thead>
                                 <tr style={{ background: PRIMARY }}>
+                                  <th className="text-right px-3 py-2 text-xs font-bold uppercase tracking-wide whitespace-nowrap text-white">
+                                    Šifra
+                                  </th>
                                   <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wide whitespace-nowrap text-white">
                                     Partner
                                   </th>
@@ -971,6 +982,9 @@ export function IzvodiPregled() {
                                               : "bg-green-50 hover:bg-green-100"
                                       }`}
                                     >
+                                      <td className="px-3 py-2 text-sm text-right text-gray-500 font-mono border-t border-gray-50 whitespace-nowrap">
+                                        {sifraPartneraStavke(u)}
+                                      </td>
                                       <td className="px-3 py-2 text-sm text-gray-700 border-t border-gray-50">
                                         {nazivPartnera(u)}
                                       </td>
